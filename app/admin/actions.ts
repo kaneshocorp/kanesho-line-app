@@ -118,7 +118,10 @@ export async function toggleCalendarDay(dateKey: string, next: "open" | "closed"
   } else {
     const { error } = await supabase
       .from("calendar_overrides")
-      .upsert({ date: dateKey, status: next, note: null }, { onConflict: "date" });
+      .upsert(
+        { date: dateKey, status: next, note: null, open_time: null, close_time: null },
+        { onConflict: "date" }
+      );
     if (error) throw new Error(`カレンダーの更新に失敗しました: ${error.message}`);
   }
 }
@@ -136,7 +139,7 @@ export async function getCalendarOverridesForMonth(
 
   const { data, error } = await supabase
     .from("calendar_overrides")
-    .select("date, status, note")
+    .select("date, status, note, open_time, close_time")
     .gte("date", startKey)
     .lte("date", endKey);
   if (error) throw new Error(`カレンダーの取得に失敗しました: ${error.message}`);
@@ -158,7 +161,10 @@ export async function broadcastClosureBulk(
   const upserts = dates.map((dateKey) =>
     supabase
       .from("calendar_overrides")
-      .upsert({ date: dateKey, status: "temp_closed", note: message }, { onConflict: "date" })
+      .upsert(
+        { date: dateKey, status: "temp_closed", note: message, open_time: null, close_time: null },
+        { onConflict: "date" }
+      )
   );
   const results = await Promise.all(upserts);
   const failed = results.find((r) => r.error);
@@ -176,6 +182,53 @@ export async function broadcastClosureBulk(
     kind: "closure",
     recipient_count: recipientCount ?? 0,
     snapshot: { dates, message },
+  });
+  if (broadcastError) throw new Error(`配信履歴の保存に失敗しました: ${broadcastError.message}`);
+
+  return { recipientCount: recipientCount ?? 0 };
+}
+
+/**
+ * 複数日をまとめて「時短営業」にし、1通の配信で通知する。
+ * openTime/closeTimeは "HH:00" 形式（1時間単位での指定を想定）。
+ */
+export async function broadcastShortHoursBulk(
+  dates: string[],
+  openTime: string,
+  closeTime: string,
+  message: string
+): Promise<{ recipientCount: number }> {
+  if (dates.length === 0) throw new Error("時短営業にする日付が選択されていません");
+  const supabase = supabaseAdmin();
+
+  const upserts = dates.map((dateKey) =>
+    supabase.from("calendar_overrides").upsert(
+      {
+        date: dateKey,
+        status: "short_hours",
+        note: message,
+        open_time: openTime,
+        close_time: closeTime,
+      },
+      { onConflict: "date" }
+    )
+  );
+  const results = await Promise.all(upserts);
+  const failed = results.find((r) => r.error);
+  if (failed?.error) throw new Error(`カレンダーの更新に失敗しました: ${failed.error.message}`);
+
+  const { count: recipientCount, error: countError } = await supabase
+    .from("friends")
+    .select("*", { count: "exact", head: true })
+    .eq("active", true);
+  if (countError) throw new Error(`配信対象人数の取得に失敗しました: ${countError.message}`);
+
+  await lineClient().broadcast({ messages: [buildTextMessage(message)] });
+
+  const { error: broadcastError } = await supabase.from("broadcasts").insert({
+    kind: "short_hours",
+    recipient_count: recipientCount ?? 0,
+    snapshot: { dates, openTime, closeTime, message },
   });
   if (broadcastError) throw new Error(`配信履歴の保存に失敗しました: ${broadcastError.message}`);
 

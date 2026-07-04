@@ -14,6 +14,7 @@ import {
   broadcastPrices,
   toggleCalendarDay,
   broadcastClosureBulk,
+  broadcastShortHoursBulk,
   getCalendarOverridesForMonth,
 } from "@/app/admin/actions";
 
@@ -87,6 +88,25 @@ function buildClosureMessage(dateKeys: string[], today: Date): string {
   return `【営業日変更のお知らせ】${label}は休業とさせていただきます。あらかじめご了承ください。`;
 }
 
+/** 時短営業の配信文面を自動生成する。 */
+function buildShortHoursMessage(dateKeys: string[], openTime: string, closeTime: string): string {
+  const label = formatClosureDateList(dateKeys);
+  return `【時短営業のお知らせ】${label}は営業時間を${openTime.slice(0, 5)}〜${closeTime.slice(0, 5)}に短縮させていただきます。ご了承ください。`;
+}
+
+/** 6:00〜22:00を1時間刻みで並べた"HH:00"形式の選択肢。 */
+const HOUR_OPTIONS: string[] = Array.from({ length: 17 }, (_, i) => `${String(i + 6).padStart(2, "0")}:00`);
+
+/** "HH:MM:SS"や"HH:MM"を1時間単位の"HH:00"へ丸める。範囲外ならHOUR_OPTIONSの端に寄せる。 */
+function roundToHourOption(time: string | null | undefined, fallback: string): string {
+  const source = time ?? fallback;
+  const hourStr = source.slice(0, 2);
+  const hour = Number(hourStr);
+  if (Number.isNaN(hour)) return fallback;
+  const clamped = Math.min(22, Math.max(6, hour));
+  return `${String(clamped).padStart(2, "0")}:00`;
+}
+
 export default function PriceTab({
   initialItems,
   initialCalendarOverrides,
@@ -111,8 +131,26 @@ export default function PriceTab({
   const [closureTextEdited, setClosureTextEdited] = useState(false);
   const [sending, setSending] = useState(false);
 
+  // カレンダータップのモード。"close"=休業予定として選択、"short"=時短営業として選択。
+  const [closureMode, setClosureMode] = useState<"close" | "short">("close");
+
   // 休業予定として選択中の日付（dateKeyの集合）。配信確定でtemp_closedへ反映される。
   const [pendingClosureDates, setPendingClosureDates] = useState<Set<string>>(new Set());
+
+  // 時短営業予定として選択中の日付（dateKeyの集合）。配信確定でshort_hoursへ反映される。
+  const [pendingShortHoursDates, setPendingShortHoursDates] = useState<Set<string>>(new Set());
+
+  const [shortHoursSheetOpen, setShortHoursSheetOpen] = useState(false);
+  const [shortHoursText, setShortHoursText] = useState("");
+  const [shortHoursTextEdited, setShortHoursTextEdited] = useState(false);
+  const [shortOpenTime, setShortOpenTime] = useState<string>(
+    roundToHourOption(businessConfig.open_time, "09:00")
+  );
+  const [shortCloseTime, setShortCloseTime] = useState<string>(() => {
+    const base = roundToHourOption(businessConfig.close_time, "19:00");
+    const hour = Number(base.slice(0, 2));
+    return `${String(Math.max(6, hour - 2)).padStart(2, "0")}:00`;
+  });
 
   const today = new Date();
   const currentMonthStart = { year: today.getFullYear(), month: today.getMonth() };
@@ -229,6 +267,19 @@ export default function PriceTab({
     });
   }
 
+  /** 営業中の日をタップ（時短モード）: 時短営業予定としての選択/選択解除をトグルする。 */
+  function handleTogglePendingShortHours(dateKey: string) {
+    setPendingShortHoursDates((prev) => {
+      const next = new Set(prev);
+      if (next.has(dateKey)) {
+        next.delete(dateKey);
+      } else {
+        next.add(dateKey);
+      }
+      return next;
+    });
+  }
+
   /** 休業中（closed/temp_closed/holiday）の日をタップ: 即座に営業へ戻す。 */
   function handleReopenDay(date: Date) {
     if (loadingMonth) return;
@@ -244,7 +295,7 @@ export default function PriceTab({
         ? currentOverrides.filter((o) => o.date !== dateKey)
         : [
             ...currentOverrides.filter((o) => o.date !== dateKey),
-            { date: dateKey, status: "open" as const, note: null },
+            { date: dateKey, status: "open" as const, note: null, open_time: null, close_time: null },
           ];
     setOverridesByMonth((prev) => ({ ...prev, [monthOfDate]: nextOverrides }));
 
@@ -264,7 +315,11 @@ export default function PriceTab({
     const dateKey = toDateKey(date);
     const status = effectiveStatus(date, overridesByDate, businessConfig);
     if (status === "open") {
-      handleTogglePendingClosure(dateKey);
+      if (closureMode === "short") {
+        handleTogglePendingShortHours(dateKey);
+      } else {
+        handleTogglePendingClosure(dateKey);
+      }
     } else {
       handleReopenDay(date);
     }
@@ -341,7 +396,13 @@ export default function PriceTab({
           const existing = next[mKey] ?? [];
           next[mKey] = [
             ...existing.filter((o) => o.date !== dateKey),
-            { date: dateKey, status: "temp_closed" as const, note: closureText.trim() },
+            {
+              date: dateKey,
+              status: "temp_closed" as const,
+              note: closureText.trim(),
+              open_time: null,
+              close_time: null,
+            },
           ];
         }
         return next;
@@ -350,6 +411,90 @@ export default function PriceTab({
       setClosureSheetOpen(false);
       setClosureText("");
       setClosureTextEdited(false);
+      showToast(`配信しました（${recipientCount}人）`);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "配信に失敗しました");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  const pendingShortHoursList = useMemo(
+    () => [...pendingShortHoursDates].sort(),
+    [pendingShortHoursDates]
+  );
+
+  const shortHoursDateLabel = useMemo(
+    () => (pendingShortHoursList.length > 0 ? formatClosureDateList(pendingShortHoursList) : ""),
+    [pendingShortHoursList]
+  );
+
+  function handleOpenShortHoursSheet() {
+    if (pendingShortHoursList.length === 0) return;
+    if (!shortHoursTextEdited) {
+      setShortHoursText(buildShortHoursMessage(pendingShortHoursList, shortOpenTime, shortCloseTime));
+    }
+    setShortHoursSheetOpen(true);
+  }
+
+  function handleShortHoursTextChange(value: string) {
+    setShortHoursText(value);
+    setShortHoursTextEdited(true);
+  }
+
+  function handleShortOpenTimeChange(value: string) {
+    setShortOpenTime(value);
+    if (!shortHoursTextEdited) {
+      setShortHoursText(buildShortHoursMessage(pendingShortHoursList, value, shortCloseTime));
+    }
+  }
+
+  function handleShortCloseTimeChange(value: string) {
+    setShortCloseTime(value);
+    if (!shortHoursTextEdited) {
+      setShortHoursText(buildShortHoursMessage(pendingShortHoursList, shortOpenTime, value));
+    }
+  }
+
+  function handleCloseShortHoursSheet() {
+    if (sending) return;
+    setShortHoursSheetOpen(false);
+  }
+
+  async function handleConfirmShortHoursBroadcast() {
+    if (pendingShortHoursList.length === 0 || !shortHoursText.trim()) return;
+    setSending(true);
+    try {
+      const { recipientCount } = await broadcastShortHoursBulk(
+        pendingShortHoursList,
+        shortOpenTime,
+        shortCloseTime,
+        shortHoursText.trim()
+      );
+      // 楽観的に該当日をローカルstateでshort_hoursへ更新する
+      setOverridesByMonth((prev) => {
+        const next = { ...prev };
+        for (const dateKey of pendingShortHoursList) {
+          const [y, m] = dateKey.split("-").map(Number);
+          const mKey = monthKey(y, m - 1);
+          const existing = next[mKey] ?? [];
+          next[mKey] = [
+            ...existing.filter((o) => o.date !== dateKey),
+            {
+              date: dateKey,
+              status: "short_hours" as const,
+              note: shortHoursText.trim(),
+              open_time: `${shortOpenTime}:00`,
+              close_time: `${shortCloseTime}:00`,
+            },
+          ];
+        }
+        return next;
+      });
+      setPendingShortHoursDates(new Set());
+      setShortHoursSheetOpen(false);
+      setShortHoursText("");
+      setShortHoursTextEdited(false);
       showToast(`配信しました（${recipientCount}人）`);
     } catch (e) {
       showToast(e instanceof Error ? e.message : "配信に失敗しました");
@@ -387,7 +532,7 @@ export default function PriceTab({
       <div className="ad-card">
         <div className="cap">
           <span>営業カレンダー</span>
-          <span className="hint">タップで休業予定を選択・休業日は即営業に戻せます</span>
+          <span className="hint">タップで休業/時短予定を選択・休業日や時短日は即営業に戻せます</span>
         </div>
         <div className="cal-nav">
           <button
@@ -408,6 +553,22 @@ export default function PriceTab({
             ▶
           </button>
         </div>
+        <div className="mode-toggle">
+          <button
+            type="button"
+            className={closureMode === "close" ? "on" : ""}
+            onClick={() => setClosureMode("close")}
+          >
+            休業にする
+          </button>
+          <button
+            type="button"
+            className={closureMode === "short" ? "on" : ""}
+            onClick={() => setClosureMode("short")}
+          >
+            時短にする
+          </button>
+        </div>
         <div className="cal">
           {WEEKDAY_LABELS.map((w) => (
             <div className="h7" key={w}>
@@ -420,6 +581,7 @@ export default function PriceTab({
             const dateKey = toDateKey(date);
             const status = effectiveStatus(date, overridesByDate, businessConfig);
             const isPending = pendingClosureDates.has(dateKey);
+            const isPendingShort = pendingShortHoursDates.has(dateKey);
             const isPast =
               date < new Date(today.getFullYear(), today.getMonth(), today.getDate());
             const isToday = dateKey === toDateKey(today);
@@ -427,18 +589,20 @@ export default function PriceTab({
               open: "営業",
               closed: "休業",
               temp_closed: "臨時休",
+              short_hours: "時短",
               holiday: "祝 休業",
             };
+            const label = isPending || isPendingShort ? "選択中" : statusLabel[status];
             return (
               <button
                 type="button"
                 key={idx}
-                className={`c ${status}${isPending ? " pending" : ""}${isPast ? " past" : ""}${isToday ? " today" : ""}`}
+                className={`c ${status}${isPending ? " pending" : ""}${isPendingShort ? " pending-short" : ""}${isPast ? " past" : ""}${isToday ? " today" : ""}`}
                 onClick={() => handleCalendarClick(date)}
                 disabled={loadingMonth}
               >
                 {date.getDate()}
-                <span className="s">{isPending ? "選択中" : statusLabel[status]}</span>
+                <span className="s">{label}</span>
               </button>
             );
           })}
@@ -464,10 +628,21 @@ export default function PriceTab({
             <i style={{ background: "#fff8e8", border: "1px dashed #c99a2e" }} />
             休業予定として選択中
           </span>
+          <span className="sw-short">
+            <i />
+            時短営業
+          </span>
         </div>
       </div>
 
-      <div style={{ height: pendingClosureList.length > 0 ? 168 : 96 }} />
+      <div
+        style={{
+          height:
+            96 +
+            (pendingClosureList.length > 0 ? 72 : 0) +
+            (pendingShortHoursList.length > 0 ? 72 : 0),
+        }}
+      />
 
       {pendingClosureList.length > 0 && (
         <div className="ad-send closure">
@@ -475,6 +650,15 @@ export default function PriceTab({
             {pendingClosureList.length}件選択中 → 確定して配信
           </button>
           <div className="cnt">{closureDateLabel}</div>
+        </div>
+      )}
+
+      {pendingShortHoursList.length > 0 && (
+        <div className="ad-send short">
+          <button type="button" onClick={handleOpenShortHoursSheet}>
+            {pendingShortHoursList.length}件選択中（時短） → 時間を設定して配信
+          </button>
+          <div className="cnt">{shortHoursDateLabel}</div>
         </div>
       )}
 
@@ -553,6 +737,72 @@ export default function PriceTab({
                 className="go warn"
                 onClick={handleConfirmClosureBroadcast}
                 disabled={sending || pendingClosureList.length === 0 || !closureText.trim()}
+              >
+                {sending ? "配信中…" : "配信する"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {shortHoursSheetOpen && (
+        <div className="sheet-bk on" onClick={handleCloseShortHoursSheet}>
+          <div className="sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="st">時短営業を確定して配信</div>
+            <div className="ss">{shortHoursDateLabel}</div>
+            <div className="hour-select-row">
+              <select
+                value={shortOpenTime}
+                onChange={(e) => handleShortOpenTimeChange(e.target.value)}
+              >
+                {HOUR_OPTIONS.map((h) => (
+                  <option key={h} value={h}>
+                    {h}
+                  </option>
+                ))}
+              </select>
+              <span>〜</span>
+              <select
+                value={shortCloseTime}
+                onChange={(e) => handleShortCloseTimeChange(e.target.value)}
+              >
+                {HOUR_OPTIONS.map((h) => (
+                  <option key={h} value={h}>
+                    {h}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <textarea
+              rows={5}
+              value={shortHoursText}
+              onChange={(e) => handleShortHoursTextChange(e.target.value)}
+              placeholder="配信文面を入力してください"
+            />
+            <div className="impact">
+              <span>① LINEへ一斉配信</span>
+              <span>② 価格ページにバナー</span>
+              <span>③ 営業カレンダーに反映</span>
+            </div>
+            <div className="acts">
+              <button
+                type="button"
+                className="no"
+                onClick={handleCloseShortHoursSheet}
+                disabled={sending}
+              >
+                やめる
+              </button>
+              <button
+                type="button"
+                className="go"
+                onClick={handleConfirmShortHoursBroadcast}
+                disabled={
+                  sending ||
+                  pendingShortHoursList.length === 0 ||
+                  !shortHoursText.trim() ||
+                  shortOpenTime >= shortCloseTime
+                }
               >
                 {sending ? "配信中…" : "配信する"}
               </button>

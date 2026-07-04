@@ -34,8 +34,9 @@ export default function AnnouncementTab({
           <span>お知らせを配信</span>
           <span className="hint">価格・休業連絡以外の自由な文面</span>
         </div>
-        <div style={{ padding: "12px 14px" }}>
+        <div className="announce-box">
           <textarea
+            className="announce-textarea"
             rows={6}
             value={text}
             onChange={(e) => setText(e.target.value)}

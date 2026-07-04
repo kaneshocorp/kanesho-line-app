@@ -1021,3 +1021,126 @@ a:focus-visible {
   color: var(--amber-ink);
   font-weight: 600;
 }
+
+/* ---------- item name save confirmation ---------- */
+.im-name-wrap {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+}
+.im-name-wrap .im-name {
+  width: 100%;
+}
+.im-saved {
+  position: absolute;
+  left: 2px;
+  top: 100%;
+  margin-top: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #3b6d11;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.im-saved.on {
+  opacity: 1;
+}
+
+/* ---------- short-hours (時短営業) calendar cell ---------- */
+.cal .c.short_hours {
+  background: #e6f1fb;
+  color: #185fa5;
+}
+.cal .c.short_hours .s {
+  color: #185fa5;
+}
+.cal .c.pending-short {
+  background: #e6f1fb;
+  color: #185fa5;
+  border: 1.5px dashed #378add;
+}
+.cal .c.pending-short .s {
+  color: #185fa5;
+}
+.legend .sw-short i {
+  background: #e6f1fb;
+}
+
+/* ---------- calendar mode toggle (休業にする / 時短にする) ---------- */
+.mode-toggle {
+  display: flex;
+  gap: 6px;
+  padding: 0 14px 8px;
+}
+.mode-toggle button {
+  flex: 1;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 7px 0;
+  border-radius: 8px;
+  border: 1px solid var(--hair);
+  color: var(--ink2);
+  background: #f7f9fa;
+}
+.mode-toggle button.on {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+.ad-send.short button {
+  background: #fff;
+  color: #185fa5;
+  border: 1.5px solid #378add;
+  box-shadow: none;
+}
+.ad-send.short .cnt {
+  color: #185fa5;
+  font-weight: 600;
+}
+
+/* ---------- hour picker (1時間単位) ---------- */
+.hour-select-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.hour-select-row select {
+  flex: 1;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  padding: 8px 6px;
+  font-size: 13px;
+  background: #fff;
+  color: var(--ink);
+}
+.hour-select-row span {
+  font-size: 12px;
+  color: var(--ink2);
+  flex: none;
+}
+
+/* ---------- announcement box (お知らせタブ) ---------- */
+.announce-box {
+  padding: 12px 14px;
+}
+.announce-textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.6;
+  resize: vertical;
+  color: var(--ink);
+  background: #fafbfc;
+}
+.announce-textarea:focus {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}

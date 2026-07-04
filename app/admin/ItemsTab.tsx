@@ -43,6 +43,19 @@ export default function ItemsTab({
     Object.fromEntries(initialItems.map((i) => [i.id, i.name]))
   );
   const [busy, setBusy] = useState(false);
+  // 名前を保存した直後、その行にだけ一時的に「保存しました」を出す
+  const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
+
+  function flashSaved(itemId: string) {
+    setSavedIds((prev) => new Set(prev).add(itemId));
+    setTimeout(() => {
+      setSavedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(itemId);
+        return next;
+      });
+    }, 1500);
+  }
 
   // addItem完了後のrouter.refresh()でinitialItemsという新しい配列が親から渡された時だけ、
   // ローカルstateをそれに合わせて同期する（新規行のidが確定するのはこの時点のため）。
@@ -66,6 +79,7 @@ export default function ItemsTab({
     startTransition(async () => {
       try {
         await updateItemName(itemId, value);
+        flashSaved(itemId);
       } catch (e) {
         setItems(previous);
         setNames(Object.fromEntries(previous.map((i) => [i.id, i.name])));
@@ -180,6 +194,7 @@ export default function ItemsTab({
                 item={item}
                 name={names[item.id] ?? ""}
                 disabled={isPending}
+                saved={savedIds.has(item.id)}
                 onNameChange={(value) => setNames((prev) => ({ ...prev, [item.id]: value }))}
                 onNameBlur={() => handleNameBlur(item.id)}
                 onToggleActive={() => handleToggleActive(item)}
@@ -200,6 +215,7 @@ function SortableItemRow({
   item,
   name,
   disabled,
+  saved,
   onNameChange,
   onNameBlur,
   onToggleActive,
@@ -208,6 +224,7 @@ function SortableItemRow({
   item: ItemRow;
   name: string;
   disabled?: boolean;
+  saved?: boolean;
   onNameChange: (value: string) => void;
   onNameBlur: () => void;
   onToggleActive: () => void;
@@ -229,14 +246,17 @@ function SortableItemRow({
       <div className="im-handle" {...attributes} {...listeners}>
         ⋮⋮
       </div>
-      <input
-        className="im-name"
-        type="text"
-        value={name}
-        disabled={disabled}
-        onChange={(e) => onNameChange(e.target.value)}
-        onBlur={onNameBlur}
-      />
+      <div className="im-name-wrap">
+        <input
+          className="im-name"
+          type="text"
+          value={name}
+          disabled={disabled}
+          onChange={(e) => onNameChange(e.target.value)}
+          onBlur={onNameBlur}
+        />
+        <span className={`im-saved${saved ? " on" : ""}`}>✓ 保存しました</span>
+      </div>
       <button
         type="button"
         className={`im-vis${item.active ? "" : " off"}`}

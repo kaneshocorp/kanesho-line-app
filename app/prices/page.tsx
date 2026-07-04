@@ -1,5 +1,5 @@
 import { supabasePublic } from "@/lib/supabase/public";
-import { toDateKey } from "@/lib/calendar";
+import { effectiveHours, overridesToFullMap, toDateKey } from "@/lib/calendar";
 import type { BusinessConfigRow, CalendarOverrideRow } from "@/lib/types";
 import PriceChart, { type ChartItem } from "./PriceChart";
 
@@ -65,7 +65,7 @@ export default async function PricesPage() {
       .order("sort_order", { ascending: true }),
     supabase
       .from("calendar_overrides")
-      .select("date, status, note")
+      .select("date, status, note, open_time, close_time")
       .order("date", { ascending: true }),
     supabase.from("business_config").select("*").eq("id", 1).maybeSingle(),
   ]);
@@ -98,6 +98,10 @@ export default async function PricesPage() {
   const upcomingClosure = overrides.find(
     (o) => o.status === "temp_closed" && o.date >= todayKey
   );
+  const upcomingShortHours = overrides.find(
+    (o) => o.status === "short_hours" && o.date >= todayKey
+  );
+  const fullOverridesByDate = overridesToFullMap(overrides);
 
   // 最終更新時刻: price_history の最新recorded_atがあればそれを使う。
   const latestHistory = await supabase
@@ -132,6 +136,20 @@ export default async function PricesPage() {
           ⚠ {formatOverrideDate(upcomingClosure.date)}は臨時休業いたします
         </div>
       )}
+
+      {upcomingShortHours && (() => {
+        const hours = effectiveHours(
+          new Date(`${upcomingShortHours.date}T00:00:00`),
+          fullOverridesByDate,
+          config ?? { open_time: "09:00:00", close_time: "18:00:00" }
+        );
+        return (
+          <div className="us-banner">
+            ⚠ {formatOverrideDate(upcomingShortHours.date)}は{formatTime(hours.openTime)}〜
+            {formatTime(hours.closeTime)}の時短営業です
+          </div>
+        );
+      })()}
 
       <div className="us-notice">
         <div className="us-notice-row">

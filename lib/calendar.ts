@@ -57,3 +57,24 @@ export function effectiveStatus(
 export function overridesToMap(rows: CalendarOverrideRow[]): Map<string, CalendarStatus> {
   return new Map(rows.map((r) => [r.date, r.status]));
 }
+
+/** 時短営業の時刻など、override行そのものが必要な場合に使う（overridesToMapはstatusしか持たない）。 */
+export function overridesToFullMap(rows: CalendarOverrideRow[]): Map<string, CalendarOverrideRow> {
+  return new Map(rows.map((r) => [r.date, r]));
+}
+
+/**
+ * その日の実際の営業時間。short_hoursのoverrideがあればその日専用の時刻を、
+ * なければ通常の営業時間（business_config）を返す。
+ */
+export function effectiveHours(
+  date: Date,
+  fullOverridesByDate: Map<string, CalendarOverrideRow>,
+  config: Pick<BusinessConfigRow, "open_time" | "close_time">
+): { openTime: string; closeTime: string } {
+  const override = fullOverridesByDate.get(toDateKey(date));
+  if (override?.status === "short_hours" && override.open_time && override.close_time) {
+    return { openTime: override.open_time, closeTime: override.close_time };
+  }
+  return { openTime: config.open_time, closeTime: config.close_time };
+}

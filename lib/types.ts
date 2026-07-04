@@ -36,7 +36,7 @@ export type PhotoSubmissionRow = {
 };
 
 /** DBに保存されるカレンダー例外の状態 */
-export type CalendarStatus = "open" | "closed" | "temp_closed";
+export type CalendarStatus = "open" | "closed" | "temp_closed" | "short_hours";
 
 /** 表示用の実効ステータス。祝日は例外テーブルに保存せず実行時に判定するため別区分。 */
 export type EffectiveCalendarStatus = CalendarStatus | "holiday";
@@ -45,6 +45,9 @@ export type CalendarOverrideRow = {
   date: string;
   status: CalendarStatus;
   note: string | null;
+  /** status が short_hours のときだけ使う、その日だけの営業時間 */
+  open_time: string | null;
+  close_time: string | null;
 };
 
 export type BusinessConfigRow = {
@@ -56,7 +59,7 @@ export type BusinessConfigRow = {
   break_end: string | null;
 };
 
-export type BroadcastKind = "price" | "closure" | "announcement";
+export type BroadcastKind = "price" | "closure" | "announcement" | "short_hours";
 
 export type BroadcastRow = {
   id: string;

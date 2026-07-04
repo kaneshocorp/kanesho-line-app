@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { supabasePublic } from "@/lib/supabase/public";
-import { effectiveStatus, overridesToMap, toDateKey } from "@/lib/calendar";
+import { effectiveHours, effectiveStatus, overridesToFullMap, overridesToMap, toDateKey } from "@/lib/calendar";
 import type { BusinessConfigRow, CalendarOverrideRow, EffectiveCalendarStatus } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -55,7 +55,7 @@ export default async function CalendarPage({
   const [overridesRes, configRes] = await Promise.all([
     supabase
       .from("calendar_overrides")
-      .select("date, status, note")
+      .select("date, status, note, open_time, close_time")
       .order("date", { ascending: true }),
     supabase.from("business_config").select("*").eq("id", 1).maybeSingle(),
   ]);
@@ -67,8 +67,12 @@ export default async function CalendarPage({
   const upcomingClosure = overrides.find(
     (o) => o.status === "temp_closed" && o.date >= todayKey
   );
+  const upcomingShortHours = overrides.find(
+    (o) => o.status === "short_hours" && o.date >= todayKey
+  );
 
   const overridesByDate = overridesToMap(overrides);
+  const fullOverridesByDate = overridesToFullMap(overrides);
 
   const now = new Date();
   const parsed = parseMonthParam(monthParamRaw);
@@ -127,6 +131,20 @@ export default async function CalendarPage({
         </div>
       )}
 
+      {upcomingShortHours && (() => {
+        const hours = effectiveHours(
+          new Date(`${upcomingShortHours.date}T00:00:00`),
+          fullOverridesByDate,
+          config ?? { open_time: "09:00:00", close_time: "18:00:00" }
+        );
+        return (
+          <div className="us-banner">
+            ⚠ {formatOverrideDate(upcomingShortHours.date)}は{formatTime(hours.openTime)}〜
+            {formatTime(hours.closeTime)}の時短営業です
+          </div>
+        );
+      })()}
+
       <div className="us-notice">
         営業時間 {openTime ?? "--"}–{closeTime ?? "--"}
         {breakStart && breakEnd
@@ -168,6 +186,8 @@ export default async function CalendarPage({
             const statusLabel =
               cell.status === "temp_closed"
                 ? "臨時休"
+                : cell.status === "short_hours"
+                ? "時短"
                 : cell.status === "holiday"
                 ? "祝 休業"
                 : cell.status === "closed"
@@ -197,6 +217,10 @@ export default async function CalendarPage({
           <span>
             <i style={{ background: "#fcf3df" }} />
             臨時休業
+          </span>
+          <span className="sw-short">
+            <i />
+            時短営業
           </span>
         </div>
       </section>
