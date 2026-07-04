@@ -80,6 +80,9 @@ export default function ItemsTab({
       try {
         await updateItemName(itemId, value);
         flashSaved(itemId);
+        // 品目名は価格配信タブでも表示されるため、裏側で共有データを最新化しておく
+        // （このタブ自体は既に楽観的更新済みなので、体感速度には影響しない）。
+        router.refresh();
       } catch (e) {
         setItems(previous);
         setNames(Object.fromEntries(previous.map((i) => [i.id, i.name])));
@@ -97,6 +100,8 @@ export default function ItemsTab({
     startTransition(async () => {
       try {
         await toggleItemActive(item.id, nextActive);
+        // 表示/非表示は価格配信タブの品目一覧に直結するため、裏側で共有データを最新化する。
+        router.refresh();
       } catch (e) {
         setItems(previous);
         showToast(e instanceof Error ? e.message : "表示設定の更新に失敗しました");
@@ -111,6 +116,7 @@ export default function ItemsTab({
     startTransition(async () => {
       try {
         await deleteItem(item.id);
+        router.refresh();
       } catch (e) {
         setItems(previous);
         showToast(e instanceof Error ? e.message : "削除に失敗しました");
@@ -133,6 +139,7 @@ export default function ItemsTab({
     startTransition(async () => {
       try {
         await setItemOrder(reordered.map((i) => i.id));
+        router.refresh();
       } catch (e) {
         setItems(previous);
         showToast(e instanceof Error ? e.message : "並び替えに失敗しました");

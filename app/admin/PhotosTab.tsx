@@ -23,6 +23,7 @@ export default function PhotosTab({
   const [, startTransition] = useTransition();
   const [photos, setPhotos] = useState<PhotoSubmissionRow[]>(initialPhotoSubmissions);
   const [showDone, setShowDone] = useState(false);
+  const [viewingMessageId, setViewingMessageId] = useState<string | null>(null);
 
   function handleToggle(photo: PhotoSubmissionRow) {
     const nextDone = !photo.done;
@@ -66,7 +67,12 @@ export default function PhotosTab({
       )}
       {visiblePhotos.map((photo) => (
         <div className={`ps-row${photo.done ? " done" : ""}`} key={photo.id}>
-          <div className="ps-thumb">
+          <button
+            type="button"
+            className="ps-thumb"
+            onClick={() => setViewingMessageId(photo.message_id)}
+            aria-label="写真を拡大表示"
+          >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={`/api/line/image/${photo.message_id}`}
@@ -75,7 +81,7 @@ export default function PhotosTab({
                 e.currentTarget.style.display = "none";
               }}
             />
-          </div>
+          </button>
           <div className="ps-nm">
             <span className="n">{photo.friend?.display_name ?? "不明な友だち"}</span>
             <span className="m">{photo.friend?.real_name ?? "本名未確認"}</span>
@@ -92,6 +98,25 @@ export default function PhotosTab({
             ? "対応済みを隠す"
             : `対応済み（${donePhotos.length}件）を表示`}
         </button>
+      )}
+
+      {viewingMessageId && (
+        <div className="photo-viewer-bk" onClick={() => setViewingMessageId(null)}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={`/api/line/image/${viewingMessageId}`}
+            alt="査定写真（拡大）"
+            className="photo-viewer-img"
+          />
+          <button
+            type="button"
+            className="photo-viewer-close"
+            onClick={() => setViewingMessageId(null)}
+            aria-label="閉じる"
+          >
+            ✕
+          </button>
+        </div>
       )}
     </div>
   );
