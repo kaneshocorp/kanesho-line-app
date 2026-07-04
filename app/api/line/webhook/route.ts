@@ -9,28 +9,44 @@ const PHOTO_ASSESSMENT_KEYWORD = "写真でかんたん査定";
 async function handleFollow(event: webhook.FollowEvent) {
   if (event.source?.type !== "user" || !event.source.userId) return;
   const userId = event.source.userId;
+  const supabase = supabaseAdmin();
 
+  const { data: existing } = await supabase
+    .from("friends")
+    .select("real_name")
+    .eq("line_user_id", userId)
+    .maybeSingle();
+
+  if (existing?.real_name) {
+    // 以前ブロック等で離脱していたが、本名は既に確認済みの友だち → 再度名前は聞かず再アクティブ化するだけ
+    await supabase.from("friends").update({ active: true }).eq("line_user_id", userId);
+    if (event.replyToken) {
+      await lineClient().replyMessage({
+        replyToken: event.replyToken,
+        messages: [buildTextMessage(`お帰りなさい、${existing.real_name}様。今後ともよろしくお願いいたします。`)],
+      });
+    }
+    return;
+  }
+
+  // 新規の友だち → 本名の確認を依頼（会社名は聞かない）
   const profile = await lineClient().getProfile(userId);
-
-  await supabaseAdmin().from("friends").upsert(
+  await supabase.from("friends").upsert(
     {
       line_user_id: userId,
       display_name: profile.displayName,
       active: true,
-      awaiting_company: true,
+      awaiting_name: true,
       joined_at: new Date().toISOString(),
     },
     { onConflict: "line_user_id" }
   );
-
-  await lineClient().replyMessage({
-    replyToken: event.replyToken,
-    messages: [
-      buildTextMessage(
-        "友だち追加ありがとうございます。会社名（法人のお客様のみ）を教えてください。個人のお客様は「個人」とだけ送ってください。"
-      ),
-    ],
-  });
+  if (event.replyToken) {
+    await lineClient().replyMessage({
+      replyToken: event.replyToken,
+      messages: [buildTextMessage("友だち追加ありがとうございます。お名前（本名）を教えてください。")],
+    });
+  }
 }
 
 async function handleUnfollow(event: webhook.UnfollowEvent) {
@@ -54,15 +70,14 @@ async function handleTextMessage(
 
   const { data: friend } = await supabaseAdmin()
     .from("friends")
-    .select("line_user_id, awaiting_company")
+    .select("line_user_id, awaiting_name")
     .eq("line_user_id", userId)
     .maybeSingle();
 
-  if (friend?.awaiting_company) {
-    const company = message.text === "個人" ? "個人のお客様" : message.text;
+  if (friend?.awaiting_name) {
     await supabaseAdmin()
       .from("friends")
-      .update({ company, awaiting_company: false })
+      .update({ real_name: message.text, awaiting_name: false })
       .eq("line_user_id", userId);
 
     await lineClient().replyMessage({
@@ -101,7 +116,8 @@ async function handleImageMessage(
         line_user_id: userId,
         display_name: "LINEユーザー",
         active: true,
-        awaiting_company: false,
+        real_name: null,
+        awaiting_name: false,
       },
       { onConflict: "line_user_id", ignoreDuplicates: true }
     );

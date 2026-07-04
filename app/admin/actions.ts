@@ -2,7 +2,7 @@
 
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { lineClient, buildPriceFlexMessage, buildTextMessage } from "@/lib/line/client";
-import { toDateKey, effectiveStatus, overridesToMap } from "@/lib/calendar";
+import { toDateKey, naturalStatus } from "@/lib/calendar";
 import type { ItemRow, BusinessConfigRow, CalendarOverrideRow } from "@/lib/types";
 
 // -----------------------------------------------------------------------
@@ -93,10 +93,12 @@ export async function broadcastPrices(): Promise<{ recipientCount: number }> {
 
 /**
  * カレンダーの1日をタップした際のトグル。
- * 現在の実効ステータスが open ならその日を closed に、それ以外は open にする。
- * トグル後の値が曜日パターンと一致するなら override 自体を削除してテーブルをきれいに保つ。
+ * 呼び出し側（クライアント）が既に実効ステータスから次の状態を算出済みなので、
+ * ここではその next を受け取ってそのまま反映する。
+ * next が自然な状態（祝日・第2/4土曜・曜日パターンを考慮した naturalStatus）と一致するなら
+ * override 自体を削除してテーブルをきれいに保つ。
  */
-export async function toggleCalendarDay(dateKey: string) {
+export async function toggleCalendarDay(dateKey: string, next: "open" | "closed") {
   const supabase = supabaseAdmin();
 
   const { data: config, error: configError } = await supabase
@@ -106,23 +108,11 @@ export async function toggleCalendarDay(dateKey: string) {
     .single();
   if (configError || !config) throw new Error(`営業設定の取得に失敗しました: ${configError?.message ?? ""}`);
 
-  const { data: overrideRows, error: overrideError } = await supabase
-    .from("calendar_overrides")
-    .select("date, status, note")
-    .eq("date", dateKey);
-  if (overrideError) throw new Error(`カレンダーの取得に失敗しました: ${overrideError.message}`);
-
-  const overridesByDate = overridesToMap((overrideRows ?? []) as CalendarOverrideRow[]);
   const [y, m, d] = dateKey.split("-").map(Number);
   const date = new Date(y, m - 1, d);
-  const current = effectiveStatus(date, overridesByDate, config as BusinessConfigRow);
-  const next = current === "open" ? "closed" : "open";
+  const natural = naturalStatus(date, config as BusinessConfigRow);
 
-  const weekdayDefault = (config as BusinessConfigRow).closed_weekdays.includes(date.getDay())
-    ? "closed"
-    : "open";
-
-  if (next === weekdayDefault) {
+  if (next === natural) {
     const { error } = await supabase.from("calendar_overrides").delete().eq("date", dateKey);
     if (error) throw new Error(`カレンダーの更新に失敗しました: ${error.message}`);
   } else {
@@ -131,6 +121,26 @@ export async function toggleCalendarDay(dateKey: string) {
       .upsert({ date: dateKey, status: next, note: null }, { onConflict: "date" });
     if (error) throw new Error(`カレンダーの更新に失敗しました: ${error.message}`);
   }
+}
+
+/** 指定した年月の calendar_overrides を取得する（月ナビゲーション用の追加ロード）。 */
+export async function getCalendarOverridesForMonth(
+  year: number,
+  month: number // 0-indexed（Date.getMonth()と同じ）
+): Promise<CalendarOverrideRow[]> {
+  const supabase = supabaseAdmin();
+  const start = new Date(year, month, 1);
+  const end = new Date(year, month + 1, 0);
+  const startKey = toDateKey(start);
+  const endKey = toDateKey(end);
+
+  const { data, error } = await supabase
+    .from("calendar_overrides")
+    .select("date, status, note")
+    .gte("date", startKey)
+    .lte("date", endKey);
+  if (error) throw new Error(`カレンダーの取得に失敗しました: ${error.message}`);
+  return (data ?? []) as CalendarOverrideRow[];
 }
 
 /**

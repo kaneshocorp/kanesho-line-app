@@ -203,6 +203,34 @@ a:focus-visible {
 }
 
 /* ---------- business calendar ---------- */
+.cal-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 0 14px 6px;
+}
+.cal-nav-btn {
+  border: 1px solid var(--hair);
+  background: #fff;
+  color: var(--ink2);
+  border-radius: 8px;
+  width: 30px;
+  height: 30px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+}
+.cal-nav-btn:disabled {
+  opacity: 0.35;
+}
+.cal-nav-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  min-width: 96px;
+  text-align: center;
+}
 .cal {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
@@ -240,6 +268,13 @@ a:focus-visible {
 .cal .c.closed {
   background: #fbedea;
   color: #a73527;
+}
+.cal .c.holiday {
+  background: #fbedea;
+  color: #a73527;
+}
+.cal .c.holiday .s {
+  color: var(--up);
 }
 .cal .c.temp_closed {
   background: #fcf3df;
@@ -864,4 +899,66 @@ a:focus-visible {
   color: var(--ink2);
   margin-top: 9px;
   text-decoration: underline;
+}
+
+/* ---------- notice rows (redesigned .us-notice content) ---------- */
+.us-notice-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.us-notice-row + .us-notice-row {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed #e9ce95;
+}
+.us-notice-row .badge {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--amber);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.us-notice-row .tx {
+  flex: 1;
+  min-width: 0;
+}
+.us-notice-row .tx .main {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--amber-ink);
+  line-height: 1.5;
+}
+.us-notice-row .tx .sub {
+  font-size: 11px;
+  color: var(--amber-ink);
+  opacity: 0.85;
+  margin-top: 2px;
+  line-height: 1.6;
+}
+.us-notice-row .tx .warn {
+  color: var(--up);
+  font-weight: 700;
+}
+.us-notice-row.alert .badge {
+  background: var(--up);
+}
+
+/* ---------- calendar month navigation link (public calendar page) ---------- */
+.cal-nav-link {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--brand);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.cal-nav-link.off {
+  color: var(--ink3);
 }

@@ -28,7 +28,7 @@ export default async function AdminPage() {
     supabase.from("friends").select("*").order("joined_at", { ascending: true }),
     supabase
       .from("photo_submissions")
-      .select("*, friend:friends(display_name, company)")
+      .select("*, friend:friends(display_name, real_name)")
       .order("received_at", { ascending: false }),
     supabase
       .from("calendar_overrides")

@@ -1,10 +1,12 @@
+import Link from "next/link";
 import { supabasePublic } from "@/lib/supabase/public";
 import { effectiveStatus, overridesToMap, toDateKey } from "@/lib/calendar";
-import type { BusinessConfigRow, CalendarOverrideRow, CalendarStatus } from "@/lib/types";
+import type { BusinessConfigRow, CalendarOverrideRow, EffectiveCalendarStatus } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 const WEEKDAY_JA = ["日", "月", "火", "水", "木", "金", "土"];
+const MONTH_NAV_RANGE = 12; // 前後に移動できる月数
 
 function formatOverrideDate(dateStr: string): string {
   const d = new Date(`${dateStr}T00:00:00`);
@@ -20,7 +22,34 @@ function formatTime(t: string | null): string | null {
   return `${Number(hh)}:${mm}`;
 }
 
-export default async function CalendarPage() {
+/** "YYYY-MM" 形式をパースする。不正な場合は null。 */
+function parseMonthParam(value: string | undefined): { year: number; month: number } | null {
+  if (!value) return null;
+  const match = /^(\d{4})-(\d{2})$/.exec(value);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]) - 1;
+  if (month < 0 || month > 11) return null;
+  return { year, month };
+}
+
+function monthParam(year: number, month: number): string {
+  return `${year}-${String(month + 1).padStart(2, "0")}`;
+}
+
+function addMonths(year: number, month: number, delta: number): { year: number; month: number } {
+  const d = new Date(year, month + delta, 1);
+  return { year: d.getFullYear(), month: d.getMonth() };
+}
+
+export default async function CalendarPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const params = await searchParams;
+  const monthParamRaw = Array.isArray(params.month) ? params.month[0] : params.month;
+
   const supabase = supabasePublic();
 
   const [overridesRes, configRes] = await Promise.all([
@@ -42,14 +71,29 @@ export default async function CalendarPage() {
   const overridesByDate = overridesToMap(overrides);
 
   const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
+  const parsed = parseMonthParam(monthParamRaw);
+  const year = parsed?.year ?? now.getFullYear();
+  const month = parsed?.month ?? now.getMonth();
   const monthLabel = `${year}年${month + 1}月`;
   const firstOfMonth = new Date(year, month, 1);
   const startWeekday = firstOfMonth.getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-  const calendarCells: { date: Date | null; status: CalendarStatus | null; isToday: boolean; isPast: boolean }[] = [];
+  const prevMonth = addMonths(year, month, -1);
+  const nextMonth = addMonths(year, month, 1);
+  const minMonth = addMonths(now.getFullYear(), now.getMonth(), -MONTH_NAV_RANGE);
+  const maxMonth = addMonths(now.getFullYear(), now.getMonth(), MONTH_NAV_RANGE);
+  const canGoPrev = prevMonth.year > minMonth.year ||
+    (prevMonth.year === minMonth.year && prevMonth.month >= minMonth.month);
+  const canGoNext = nextMonth.year < maxMonth.year ||
+    (nextMonth.year === maxMonth.year && nextMonth.month <= maxMonth.month);
+
+  const calendarCells: {
+    date: Date | null;
+    status: EffectiveCalendarStatus | null;
+    isToday: boolean;
+    isPast: boolean;
+  }[] = [];
   for (let i = 0; i < startWeekday; i++) {
     calendarCells.push({ date: null, status: null, isToday: false, isPast: false });
   }
@@ -72,7 +116,7 @@ export default async function CalendarPage() {
   return (
     <div className="page">
       <header className="us-hd">
-        <div className="co">有限会社金山商店｜きちんと計量</div>
+        <div className="co">有限会社金山商店</div>
         <h1>営業カレンダー</h1>
         <div className="upd">{monthLabel}</div>
       </header>
@@ -92,7 +136,21 @@ export default async function CalendarPage() {
 
       <section className="us-card">
         <div className="cap">
+          {canGoPrev ? (
+            <Link className="cal-nav-link" href={`/calendar?month=${monthParam(prevMonth.year, prevMonth.month)}`}>
+              ← 前月
+            </Link>
+          ) : (
+            <span className="cal-nav-link off">← 前月</span>
+          )}
           <span>{monthLabel}</span>
+          {canGoNext ? (
+            <Link className="cal-nav-link" href={`/calendar?month=${monthParam(nextMonth.year, nextMonth.month)}`}>
+              翌月 →
+            </Link>
+          ) : (
+            <span className="cal-nav-link off">翌月 →</span>
+          )}
         </div>
         <div className="cal">
           {WEEKDAY_JA.map((w) => (
@@ -108,7 +166,13 @@ export default async function CalendarPage() {
             if (cell.isPast) classes.push("past");
             if (cell.isToday) classes.push("today");
             const statusLabel =
-              cell.status === "temp_closed" ? "臨時休" : cell.status === "closed" ? "休" : "";
+              cell.status === "temp_closed"
+                ? "臨時休"
+                : cell.status === "holiday"
+                ? "祝"
+                : cell.status === "closed"
+                ? "休"
+                : "";
             return (
               <div className={classes.join(" ")} key={cell.date.toISOString()}>
                 {cell.date.getDate()}
@@ -125,6 +189,10 @@ export default async function CalendarPage() {
           <span>
             <i style={{ background: "#fbedea" }} />
             定休・休業
+          </span>
+          <span>
+            <i style={{ background: "#fbedea" }} />
+            祝日
           </span>
           <span>
             <i style={{ background: "#fcf3df" }} />

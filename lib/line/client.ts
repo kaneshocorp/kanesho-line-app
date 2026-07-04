@@ -29,12 +29,22 @@ function siteUrl() {
   return process.env.NEXT_PUBLIC_SITE_URL ?? "https://example.vercel.app";
 }
 
-function diffText(price: number, prev: number | null) {
-  if (prev === null || prev === undefined) return "";
+type DiffBadge = {
+  label: string;
+  color: string;
+  backgroundColor: string;
+};
+
+function diffBadge(price: number, prev: number | null): DiffBadge | null {
+  if (prev === null || prev === undefined) return null;
   const d = price - prev;
-  if (d > 0) return ` (▲+${d.toLocaleString("ja-JP")})`;
-  if (d < 0) return ` (▼${d.toLocaleString("ja-JP")})`;
-  return " (±0)";
+  if (d > 0) {
+    return { label: `▲+${d.toLocaleString("ja-JP")}`, color: "#B3261E", backgroundColor: "#FBE7E6" };
+  }
+  if (d < 0) {
+    return { label: `▼${d.toLocaleString("ja-JP")}`, color: "#1B5E20", backgroundColor: "#E4F3E6" };
+  }
+  return { label: "±0", color: "#5F6C76", backgroundColor: "#EEF1F3" };
 }
 
 /**
@@ -51,29 +61,67 @@ export function buildPriceFlexMessage(
     .sort((a, b) => a.sort_order - b.sort_order);
   const shown = visible.slice(0, 6);
 
-  const rows: messagingApi.FlexBox[] = shown.map((it) => ({
-    layout: "horizontal",
-    type: "box",
-    contents: [
-      { type: "text", text: it.name, size: "sm", flex: 3, color: "#17222B", wrap: true },
+  const rows: messagingApi.FlexBox[] = shown.map((it, index) => {
+    const badge = diffBadge(it.published_price ?? 0, it.published_price_prev);
+
+    const priceContents: messagingApi.FlexComponent[] = [
       {
         type: "text",
-        text: `${it.published_price?.toLocaleString("ja-JP")}円${diffText(
-          it.published_price ?? 0,
-          it.published_price_prev
-        )}`,
-        size: "sm",
-        flex: 3,
-        align: "end",
+        text: `${(it.published_price ?? 0).toLocaleString("ja-JP")}`,
+        size: "xl",
         weight: "bold",
-        color: "#17222B",
+        color: "#24455C",
       },
-    ],
-    paddingTop: "6px",
-    paddingBottom: "6px",
-    borderWidth: "1px",
-    borderColor: "#EEF1F3",
-  }));
+      { type: "text", text: "円", size: "sm", color: "#24455C", margin: "xs" },
+    ];
+
+    if (badge) {
+      priceContents.push({
+        type: "box",
+        layout: "vertical",
+        margin: "sm",
+        paddingAll: "4px",
+        paddingStart: "8px",
+        paddingEnd: "8px",
+        cornerRadius: "12px",
+        backgroundColor: badge.backgroundColor,
+        justifyContent: "center",
+        contents: [
+          { type: "text", text: badge.label, size: "xxs", weight: "bold", color: badge.color, align: "center" },
+        ],
+      });
+    }
+
+    return {
+      type: "box",
+      layout: "horizontal",
+      contents: [
+        {
+          type: "text",
+          text: it.name,
+          size: "sm",
+          flex: 4,
+          color: "#17222B",
+          wrap: true,
+          gravity: "center",
+        },
+        {
+          type: "box",
+          layout: "horizontal",
+          flex: 5,
+          alignItems: "center",
+          justifyContent: "flex-end",
+          contents: priceContents,
+        },
+      ],
+      paddingTop: "10px",
+      paddingBottom: "10px",
+      paddingStart: "10px",
+      paddingEnd: "10px",
+      backgroundColor: index % 2 === 0 ? "#FFFFFF" : "#F7F9FA",
+      cornerRadius: "8px",
+    };
+  });
 
   const bubble: messagingApi.FlexBubble = {
     type: "bubble",
@@ -91,16 +139,19 @@ export function buildPriceFlexMessage(
       type: "box",
       layout: "vertical",
       paddingAll: "12px",
+      spacing: "sm",
       contents: rows.length > 0 ? rows : [{ type: "text", text: "価格情報がありません", size: "sm" }],
     },
     footer: {
       type: "box",
       layout: "vertical",
+      paddingAll: "12px",
       contents: [
         {
           type: "button",
-          style: "link",
+          style: "primary",
           height: "sm",
+          color: "#24455C",
           action: {
             type: "uri",
             label: `全${visible.length}品目・価格の推移を見る`,

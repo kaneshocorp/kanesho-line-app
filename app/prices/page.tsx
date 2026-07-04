@@ -122,7 +122,7 @@ export default async function PricesPage() {
   return (
     <div className="page">
       <header className="us-hd">
-        <div className="co">有限会社金山商店｜きちんと計量</div>
+        <div className="co">有限会社金山商店</div>
         <h1>現在の買取価格</h1>
         <div className="upd">{formatUpdatedAt(updatedAtIso)}</div>
       </header>
@@ -134,12 +134,29 @@ export default async function PricesPage() {
       )}
 
       <div className="us-notice">
-        ご来店の際は<b>「LINEの単価を確認してきました」</b>とスタッフにお伝えください。表示価格は店頭でのご案内と異なる場合があります。
-        <div className="hr" />
-        営業時間 {openTime ?? "--"}–{closeTime ?? "--"}
-        {breakStart && breakEnd
-          ? `（${breakStart}–${breakEnd}は昼休みのため不在です）`
-          : ""}
+        <div className="us-notice-row">
+          <span className="badge">✓</span>
+          <div className="tx">
+            <div className="main">「LINEの単価を確認してきました」とお伝えください</div>
+            <div className="sub">表示価格は店頭でのご案内と異なる場合があります</div>
+          </div>
+        </div>
+        <div className="us-notice-row alert">
+          <span className="badge">!</span>
+          <div className="tx">
+            <div className="main">
+              営業時間 {openTime ?? "--"}–{closeTime ?? "--"}
+            </div>
+            {breakStart && breakEnd && (
+              <div className="sub">
+                <span className="warn">
+                  {breakStart}–{breakEnd}は昼休みのため不在です
+                </span>
+                ・ご来店はお控えください
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       <section className="us-card">

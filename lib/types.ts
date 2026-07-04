@@ -19,9 +19,9 @@ export type PriceHistoryPoint = {
 export type FriendRow = {
   line_user_id: string;
   display_name: string;
-  company: string | null;
+  real_name: string | null;
   active: boolean;
-  awaiting_company: boolean;
+  awaiting_name: boolean;
   joined_at: string;
   updated_at: string;
 };
@@ -32,10 +32,14 @@ export type PhotoSubmissionRow = {
   message_id: string;
   received_at: string;
   done: boolean;
-  friend?: Pick<FriendRow, "display_name" | "company"> | null;
+  friend?: Pick<FriendRow, "display_name" | "real_name"> | null;
 };
 
+/** DBに保存されるカレンダー例外の状態 */
 export type CalendarStatus = "open" | "closed" | "temp_closed";
+
+/** 表示用の実効ステータス。祝日は例外テーブルに保存せず実行時に判定するため別区分。 */
+export type EffectiveCalendarStatus = CalendarStatus | "holiday";
 
 export type CalendarOverrideRow = {
   date: string;

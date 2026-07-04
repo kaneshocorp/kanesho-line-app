@@ -41,7 +41,9 @@ export default function FriendsTab({
           <div className="fr-av">{friend.display_name.charAt(0)}</div>
           <div className="fr-nm">
             <span className={`n${friend.active ? "" : " strike"}`}>{friend.display_name}</span>
-            <span className="c">{friend.company ?? "会社名未登録"}</span>
+            <span className="c">
+              {friend.awaiting_name ? "（本名確認中）" : friend.real_name ?? "（本名確認中）"}
+            </span>
           </div>
           <button
             type="button"

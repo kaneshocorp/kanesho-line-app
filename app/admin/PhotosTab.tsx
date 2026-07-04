@@ -63,7 +63,7 @@ export default function PhotosTab({
           </div>
           <div className="ps-nm">
             <span className="n">{photo.friend?.display_name ?? "不明な友だち"}</span>
-            <span className="m">{photo.friend?.company ?? "会社名未登録"}</span>
+            <span className="m">{photo.friend?.real_name ?? "本名未確認"}</span>
             <span className="t">{formatReceivedAt(photo.received_at)}</span>
           </div>
           <button type="button" className="ps-call" onClick={() => handleToggle(photo)}>

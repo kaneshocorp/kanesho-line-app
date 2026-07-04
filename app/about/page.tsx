@@ -6,7 +6,6 @@ export default function AboutPage() {
       <header className="us-hd">
         <div className="co">有限会社金山商店</div>
         <h1>会社概要</h1>
-        <div className="upd">きちんと計量、金山商店</div>
       </header>
 
       <section className="us-card">

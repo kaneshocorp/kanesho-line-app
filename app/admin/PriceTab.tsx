@@ -1,17 +1,30 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { ItemRow, CalendarOverrideRow, BusinessConfigRow, CalendarStatus } from "@/lib/types";
-import { effectiveStatus, overridesToMap, toDateKey } from "@/lib/calendar";
+import type {
+  ItemRow,
+  CalendarOverrideRow,
+  BusinessConfigRow,
+  EffectiveCalendarStatus,
+} from "@/lib/types";
+import { effectiveStatus, naturalStatus, overridesToMap, toDateKey } from "@/lib/calendar";
 import {
   updateCurrentPrice,
   broadcastPrices,
   toggleCalendarDay,
   broadcastClosure,
+  getCalendarOverridesForMonth,
 } from "@/app/admin/actions";
 
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
+
+// 未来にナビゲートできる月数（今月を含めて13ヶ月分＝約12ヶ月先まで見られる）
+const MAX_MONTHS_AHEAD = 12;
+
+function monthKey(year: number, month: number): string {
+  return `${year}-${String(month + 1).padStart(2, "0")}`;
+}
 
 function diffBadge(item: ItemRow) {
   if (!item.current_price || item.current_price <= 0) {
@@ -52,6 +65,66 @@ export default function PriceTab({
   const [closureText, setClosureText] = useState("");
   const [sending, setSending] = useState(false);
 
+  const today = new Date();
+  const currentMonthStart = { year: today.getFullYear(), month: today.getMonth() };
+
+  // 表示中の年月（未来にナビゲート可能。過去には戻れない）
+  const [viewMonth, setViewMonth] = useState(currentMonthStart);
+
+  // 月ごとのoverride一覧をキャッシュする。当月分は初期データで埋めておく。
+  const [overridesByMonth, setOverridesByMonth] = useState<Record<string, CalendarOverrideRow[]>>(
+    () => ({ [monthKey(currentMonthStart.year, currentMonthStart.month)]: initialCalendarOverrides })
+  );
+
+  const viewMonthKey = monthKey(viewMonth.year, viewMonth.month);
+  const monthLabel = `${viewMonth.year}年${viewMonth.month + 1}月`;
+
+  // 表示中の月のoverrideがまだキャッシュに無ければ読み込み中とみなす
+  const loadingMonth = overridesByMonth[viewMonthKey] === undefined;
+
+  const isAtEarliestMonth =
+    viewMonth.year === currentMonthStart.year && viewMonth.month === currentMonthStart.month;
+  const monthsAhead =
+    (viewMonth.year - currentMonthStart.year) * 12 + (viewMonth.month - currentMonthStart.month);
+  const isAtLatestMonth = monthsAhead >= MAX_MONTHS_AHEAD;
+
+  // 表示中の月のoverrideがまだキャッシュに無ければ取得する
+  useEffect(() => {
+    if (overridesByMonth[viewMonthKey] !== undefined) return;
+    let cancelled = false;
+    getCalendarOverridesForMonth(viewMonth.year, viewMonth.month)
+      .then((rows) => {
+        if (cancelled) return;
+        setOverridesByMonth((prev) => ({ ...prev, [viewMonthKey]: rows }));
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        showToast(e instanceof Error ? e.message : "カレンダーの取得に失敗しました");
+        // 失敗時も空配列でキャッシュを埋め、無限リトライにならないようにする
+        setOverridesByMonth((prev) => ({ ...prev, [viewMonthKey]: [] }));
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMonthKey]);
+
+  function handlePrevMonth() {
+    if (isAtEarliestMonth) return;
+    setViewMonth((prev) => {
+      const m = prev.month - 1;
+      return m < 0 ? { year: prev.year - 1, month: 11 } : { year: prev.year, month: m };
+    });
+  }
+
+  function handleNextMonth() {
+    if (isAtLatestMonth) return;
+    setViewMonth((prev) => {
+      const m = prev.month + 1;
+      return m > 11 ? { year: prev.year + 1, month: 0 } : { year: prev.year, month: m };
+    });
+  }
+
   const visibleItems = useMemo(
     () =>
       initialItems
@@ -61,24 +134,19 @@ export default function PriceTab({
   );
 
   const overridesByDate = useMemo(
-    () => overridesToMap(initialCalendarOverrides),
-    [initialCalendarOverrides]
+    () => overridesToMap(overridesByMonth[viewMonthKey] ?? []),
+    [overridesByMonth, viewMonthKey]
   );
 
-  const today = new Date();
-  const monthLabel = `${today.getFullYear()}年${today.getMonth() + 1}月`;
-
   const calendarCells = useMemo(() => {
-    const year = today.getFullYear();
-    const month = today.getMonth();
+    const { year, month } = viewMonth;
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
     const cells: { date: Date | null }[] = [];
     for (let i = 0; i < firstDay.getDay(); i++) cells.push({ date: null });
     for (let d = 1; d <= lastDay.getDate(); d++) cells.push({ date: new Date(year, month, d) });
     return cells;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [viewMonth]);
 
   function handlePriceInput(itemId: string, value: string) {
     const num = Math.max(0, Math.round(Number(value) || 0));
@@ -98,13 +166,33 @@ export default function PriceTab({
   }
 
   function handleCalendarClick(date: Date) {
-    if (sending) return;
+    if (loadingMonth) return;
     const dateKey = toDateKey(date);
+    const monthOfDate = monthKey(date.getFullYear(), date.getMonth());
+    const currentOverrides = overridesByMonth[monthOfDate] ?? [];
+    const currentOverridesByDate = overridesToMap(currentOverrides);
+    const current = effectiveStatus(date, currentOverridesByDate, businessConfig);
+    // 祝日・臨時休業からの再オープンも含め、開いていなければ営業に、開いていれば休業にする
+    const next: "open" | "closed" = current === "open" ? "closed" : "open";
+    const natural = naturalStatus(date, businessConfig);
+
+    // 楽観的にローカルstateを更新する
+    const previousOverrides = currentOverrides;
+    const nextOverrides =
+      next === natural
+        ? currentOverrides.filter((o) => o.date !== dateKey)
+        : [
+            ...currentOverrides.filter((o) => o.date !== dateKey),
+            { date: dateKey, status: next, note: null },
+          ];
+    setOverridesByMonth((prev) => ({ ...prev, [monthOfDate]: nextOverrides }));
+
     startTransition(async () => {
       try {
-        await toggleCalendarDay(dateKey);
-        router.refresh();
+        await toggleCalendarDay(dateKey, next);
       } catch (e) {
+        // ロールバック
+        setOverridesByMonth((prev) => ({ ...prev, [monthOfDate]: previousOverrides }));
         showToast(e instanceof Error ? e.message : "カレンダーの更新に失敗しました");
       }
     });
@@ -201,8 +289,27 @@ export default function PriceTab({
 
       <div className="ad-card">
         <div className="cap">
-          <span>営業カレンダー（{monthLabel}）</span>
+          <span>営業カレンダー</span>
           <span className="hint">タップで営業⇄休業</span>
+        </div>
+        <div className="cal-nav">
+          <button
+            type="button"
+            className="cal-nav-btn"
+            onClick={handlePrevMonth}
+            disabled={isAtEarliestMonth}
+          >
+            ◀
+          </button>
+          <span className="cal-nav-label">{monthLabel}</span>
+          <button
+            type="button"
+            className="cal-nav-btn"
+            onClick={handleNextMonth}
+            disabled={isAtLatestMonth}
+          >
+            ▶
+          </button>
         </div>
         <div className="cal">
           {WEEKDAY_LABELS.map((w) => (
@@ -217,10 +324,11 @@ export default function PriceTab({
             const isPast =
               date < new Date(today.getFullYear(), today.getMonth(), today.getDate());
             const isToday = toDateKey(date) === toDateKey(today);
-            const statusLabel: Record<CalendarStatus, string> = {
+            const statusLabel: Record<EffectiveCalendarStatus, string> = {
               open: "営業",
               closed: "休業",
               temp_closed: "臨時休",
+              holiday: "祝",
             };
             return (
               <button
@@ -228,6 +336,7 @@ export default function PriceTab({
                 key={idx}
                 className={`c ${status}${isPast ? " past" : ""}${isToday ? " today" : ""}`}
                 onClick={() => handleCalendarClick(date)}
+                disabled={loadingMonth}
               >
                 {date.getDate()}
                 <span className="s">{statusLabel[status]}</span>
@@ -247,6 +356,10 @@ export default function PriceTab({
           <span>
             <i style={{ background: "#fcf3df" }} />
             臨時休業
+          </span>
+          <span>
+            <i style={{ background: "#fbedea" }} />
+            祝日
           </span>
         </div>
         <button type="button" className="ad-close" onClick={() => setClosureOpen(true)}>

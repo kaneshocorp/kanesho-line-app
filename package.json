@@ -13,12 +13,14 @@
     "@line/bot-sdk": "^11.1.0",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.110.0",
+    "japanese-holidays": "^1.0.10",
     "next": "16.2.10",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "sharp": "^0.34.5"
   },
   "devDependencies": {
+    "@types/japanese-holidays": "^1.0.3",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
