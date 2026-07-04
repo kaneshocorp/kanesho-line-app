@@ -962,3 +962,62 @@ a:focus-visible {
 .cal-nav-link.off {
   color: var(--ink3);
 }
+
+/* ---------- item management: drag handle (dnd-kit) ---------- */
+.im-handle {
+  flex: none;
+  width: 22px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink3);
+  font-size: 14px;
+  line-height: 1;
+  letter-spacing: -1px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.im-handle:active {
+  cursor: grabbing;
+}
+
+/* ---------- photo submissions: done state & toggle ---------- */
+.ps-row.done {
+  opacity: 0.55;
+}
+.ps-toggle-done {
+  display: block;
+  width: 100%;
+  padding: 10px 14px;
+  border-top: 1px solid #eff2f4;
+  background: none;
+  border-left: none;
+  border-right: none;
+  border-bottom: none;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--brand);
+  text-align: center;
+}
+
+/* ---------- pending closure selection (PriceTab calendar) ---------- */
+.cal .c.pending {
+  background: #fff8e8;
+  color: var(--amber-ink);
+  border: 1.5px dashed #c99a2e;
+}
+.cal .c.pending .s {
+  color: var(--amber-ink);
+}
+.ad-send.closure button {
+  background: #fff;
+  color: var(--amber-ink);
+  border: 1.5px solid var(--amber);
+  box-shadow: none;
+}
+.ad-send.closure .cnt {
+  color: var(--amber-ink);
+  font-weight: 600;
+}

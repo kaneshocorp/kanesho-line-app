@@ -8,12 +8,12 @@ import type {
   BusinessConfigRow,
   EffectiveCalendarStatus,
 } from "@/lib/types";
-import { effectiveStatus, naturalStatus, overridesToMap, toDateKey } from "@/lib/calendar";
+import { effectiveStatus, naturalStatus, overridesToMap, toDateKey, holidayName } from "@/lib/calendar";
 import {
   updateCurrentPrice,
   broadcastPrices,
   toggleCalendarDay,
-  broadcastClosure,
+  broadcastClosureBulk,
   getCalendarOverridesForMonth,
 } from "@/app/admin/actions";
 
@@ -21,6 +21,9 @@ const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
 
 // 未来にナビゲートできる月数（今月を含めて13ヶ月分＝約12ヶ月先まで見られる）
 const MAX_MONTHS_AHEAD = 12;
+
+// 緊急トーンにするかどうかの閾値（今日からこの日数以内を含む場合は緊急）
+const URGENT_WITHIN_DAYS = 7;
 
 function monthKey(year: number, month: number): string {
   return `${year}-${String(month + 1).padStart(2, "0")}`;
@@ -39,8 +42,44 @@ function diffBadge(item: ItemRow) {
   return <span className="dif flat">±0</span>;
 }
 
+/** 「7/17（金）」「7/20（月・祝）」のように日付を整形する。祝日なら祝日名の代わりに「祝」を付す。 */
 function formatClosureDate(date: Date) {
-  return `${date.getMonth() + 1}/${date.getDate()}（${WEEKDAY_LABELS[date.getDay()]}）`;
+  const w = WEEKDAY_LABELS[date.getDay()];
+  const isHoliday = Boolean(holidayName(date));
+  const wLabel = isHoliday ? `${w}・祝` : w;
+  return `${date.getMonth() + 1}/${date.getDate()}（${wLabel}）`;
+}
+
+/** dateKey文字列（YYYY-MM-DD）をローカル日付として解釈する。 */
+function parseDateKey(dateKey: string): Date {
+  const [y, m, d] = dateKey.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+/** 選択した日付のdateKey配列を、日付順に整形して「・」区切りの文字列にする。 */
+function formatClosureDateList(dateKeys: string[]): string {
+  return [...dateKeys]
+    .sort()
+    .map((key) => formatClosureDate(parseDateKey(key)))
+    .join("・");
+}
+
+/** 選択日のうち最も近い日が今日からURGENT_WITHIN_DAYS以内かどうかで、緊急/通常の文面を生成する。 */
+function buildClosureMessage(dateKeys: string[], today: Date): string {
+  const label = formatClosureDateList(dateKeys);
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const minDiffDays = Math.min(
+    ...dateKeys.map((key) => {
+      const d = parseDateKey(key);
+      const dStart = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      return Math.round((dStart.getTime() - todayStart.getTime()) / 86400000);
+    })
+  );
+  const isUrgent = minDiffDays <= URGENT_WITHIN_DAYS;
+  if (isUrgent) {
+    return `【臨時休業のお知らせ】${label}は都合により休業いたします。ご迷惑をおかけしますが、よろしくお願いいたします。`;
+  }
+  return `【営業日変更のお知らせ】${label}は休業とさせていただきます。あらかじめご了承ください。`;
 }
 
 export default function PriceTab({
@@ -60,10 +99,13 @@ export default function PriceTab({
     Object.fromEntries(initialItems.map((i) => [i.id, i.current_price]))
   );
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [closureOpen, setClosureOpen] = useState(false);
-  const [closureDate, setClosureDate] = useState<string | null>(null);
+  const [closureSheetOpen, setClosureSheetOpen] = useState(false);
   const [closureText, setClosureText] = useState("");
+  const [closureTextEdited, setClosureTextEdited] = useState(false);
   const [sending, setSending] = useState(false);
+
+  // 休業予定として選択中の日付（dateKeyの集合）。配信確定でtemp_closedへ反映される。
+  const [pendingClosureDates, setPendingClosureDates] = useState<Set<string>>(new Set());
 
   const today = new Date();
   const currentMonthStart = { year: today.getFullYear(), month: today.getMonth() };
@@ -165,37 +207,58 @@ export default function PriceTab({
     });
   }
 
-  function handleCalendarClick(date: Date) {
+  /** 営業中の日をタップ: 休業予定としての選択/選択解除をトグルする。 */
+  function handleTogglePendingClosure(dateKey: string) {
+    setPendingClosureDates((prev) => {
+      const next = new Set(prev);
+      if (next.has(dateKey)) {
+        next.delete(dateKey);
+      } else {
+        next.add(dateKey);
+      }
+      return next;
+    });
+  }
+
+  /** 休業中（closed/temp_closed/holiday）の日をタップ: 即座に営業へ戻す。 */
+  function handleReopenDay(date: Date) {
     if (loadingMonth) return;
     const dateKey = toDateKey(date);
     const monthOfDate = monthKey(date.getFullYear(), date.getMonth());
     const currentOverrides = overridesByMonth[monthOfDate] ?? [];
-    const currentOverridesByDate = overridesToMap(currentOverrides);
-    const current = effectiveStatus(date, currentOverridesByDate, businessConfig);
-    // 祝日・臨時休業からの再オープンも含め、開いていなければ営業に、開いていれば休業にする
-    const next: "open" | "closed" = current === "open" ? "closed" : "open";
     const natural = naturalStatus(date, businessConfig);
 
     // 楽観的にローカルstateを更新する
     const previousOverrides = currentOverrides;
     const nextOverrides =
-      next === natural
+      natural === "open"
         ? currentOverrides.filter((o) => o.date !== dateKey)
         : [
             ...currentOverrides.filter((o) => o.date !== dateKey),
-            { date: dateKey, status: next, note: null },
+            { date: dateKey, status: "open" as const, note: null },
           ];
     setOverridesByMonth((prev) => ({ ...prev, [monthOfDate]: nextOverrides }));
 
     startTransition(async () => {
       try {
-        await toggleCalendarDay(dateKey, next);
+        await toggleCalendarDay(dateKey, "open");
       } catch (e) {
         // ロールバック
         setOverridesByMonth((prev) => ({ ...prev, [monthOfDate]: previousOverrides }));
         showToast(e instanceof Error ? e.message : "カレンダーの更新に失敗しました");
       }
     });
+  }
+
+  function handleCalendarClick(date: Date) {
+    if (loadingMonth) return;
+    const dateKey = toDateKey(date);
+    const status = effectiveStatus(date, overridesByDate, businessConfig);
+    if (status === "open") {
+      handleTogglePendingClosure(dateKey);
+    } else {
+      handleReopenDay(date);
+    }
   }
 
   const changes = visibleItems
@@ -224,36 +287,58 @@ export default function PriceTab({
     }
   }
 
-  // 臨時休業チップ: 当月の直近7日分を候補に出す
-  const closureCandidates = useMemo(() => {
-    const days: Date[] = [];
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + i);
-      days.push(d);
-    }
-    return days;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const pendingClosureList = useMemo(
+    () => [...pendingClosureDates].sort(),
+    [pendingClosureDates]
+  );
 
-  function handleSelectClosureDate(date: Date) {
-    const key = toDateKey(date);
-    setClosureDate(key);
-    const label = formatClosureDate(date);
-    setClosureText(
-      `【臨時休業のお知らせ】${label}は都合により休業いたします。翌営業日より通常営業です。ご迷惑をおかけしますが、よろしくお願いいたします。`
-    );
+  const closureDateLabel = useMemo(
+    () => (pendingClosureList.length > 0 ? formatClosureDateList(pendingClosureList) : ""),
+    [pendingClosureList]
+  );
+
+  function handleOpenClosureSheet() {
+    if (pendingClosureList.length === 0) return;
+    if (!closureTextEdited) {
+      setClosureText(buildClosureMessage(pendingClosureList, today));
+    }
+    setClosureSheetOpen(true);
   }
 
-  async function handleConfirmClosure() {
-    if (!closureDate || !closureText.trim()) return;
+  function handleClosureTextChange(value: string) {
+    setClosureText(value);
+    setClosureTextEdited(true);
+  }
+
+  function handleCloseClosureSheet() {
+    if (sending) return;
+    setClosureSheetOpen(false);
+  }
+
+  async function handleConfirmClosureBroadcast() {
+    if (pendingClosureList.length === 0 || !closureText.trim()) return;
     setSending(true);
     try {
-      const { recipientCount } = await broadcastClosure(closureDate, closureText.trim());
-      setClosureOpen(false);
-      setClosureDate(null);
+      const { recipientCount } = await broadcastClosureBulk(pendingClosureList, closureText.trim());
+      // 楽観的に該当日をローカルstateでtemp_closedへ更新する
+      setOverridesByMonth((prev) => {
+        const next = { ...prev };
+        for (const dateKey of pendingClosureList) {
+          const [y, m] = dateKey.split("-").map(Number);
+          const mKey = monthKey(y, m - 1);
+          const existing = next[mKey] ?? [];
+          next[mKey] = [
+            ...existing.filter((o) => o.date !== dateKey),
+            { date: dateKey, status: "temp_closed" as const, note: closureText.trim() },
+          ];
+        }
+        return next;
+      });
+      setPendingClosureDates(new Set());
+      setClosureSheetOpen(false);
       setClosureText("");
+      setClosureTextEdited(false);
       showToast(`配信しました（${recipientCount}人）`);
-      router.refresh();
     } catch (e) {
       showToast(e instanceof Error ? e.message : "配信に失敗しました");
     } finally {
@@ -290,7 +375,7 @@ export default function PriceTab({
       <div className="ad-card">
         <div className="cap">
           <span>営業カレンダー</span>
-          <span className="hint">タップで営業⇄休業</span>
+          <span className="hint">タップで休業予定を選択・休業日は即営業に戻せます</span>
         </div>
         <div className="cal-nav">
           <button
@@ -320,10 +405,12 @@ export default function PriceTab({
           {calendarCells.map((cell, idx) => {
             if (!cell.date) return <div className="c blank" key={idx} />;
             const date = cell.date;
+            const dateKey = toDateKey(date);
             const status = effectiveStatus(date, overridesByDate, businessConfig);
+            const isPending = pendingClosureDates.has(dateKey);
             const isPast =
               date < new Date(today.getFullYear(), today.getMonth(), today.getDate());
-            const isToday = toDateKey(date) === toDateKey(today);
+            const isToday = dateKey === toDateKey(today);
             const statusLabel: Record<EffectiveCalendarStatus, string> = {
               open: "営業",
               closed: "休業",
@@ -334,12 +421,12 @@ export default function PriceTab({
               <button
                 type="button"
                 key={idx}
-                className={`c ${status}${isPast ? " past" : ""}${isToday ? " today" : ""}`}
+                className={`c ${status}${isPending ? " pending" : ""}${isPast ? " past" : ""}${isToday ? " today" : ""}`}
                 onClick={() => handleCalendarClick(date)}
                 disabled={loadingMonth}
               >
                 {date.getDate()}
-                <span className="s">{statusLabel[status]}</span>
+                <span className="s">{isPending ? "選択中" : statusLabel[status]}</span>
               </button>
             );
           })}
@@ -361,13 +448,23 @@ export default function PriceTab({
             <i style={{ background: "#fbedea" }} />
             祝日
           </span>
+          <span>
+            <i style={{ background: "#fff8e8", border: "1px dashed #c99a2e" }} />
+            休業予定として選択中
+          </span>
         </div>
-        <button type="button" className="ad-close" onClick={() => setClosureOpen(true)}>
-          急な休業の連絡（臨時休業を配信）
-        </button>
       </div>
 
-      <div style={{ height: 96 }} />
+      <div style={{ height: pendingClosureList.length > 0 ? 168 : 96 }} />
+
+      {pendingClosureList.length > 0 && (
+        <div className="ad-send closure">
+          <button type="button" onClick={handleOpenClosureSheet}>
+            {pendingClosureList.length}件選択中 → 確定して配信
+          </button>
+          <div className="cnt">{closureDateLabel}</div>
+        </div>
+      )}
 
       <div className="ad-send">
         <button type="button" onClick={() => setPreviewOpen(true)}>
@@ -414,31 +511,16 @@ export default function PriceTab({
         </div>
       )}
 
-      {closureOpen && (
-        <div className="sheet-bk on" onClick={() => !sending && setClosureOpen(false)}>
+      {closureSheetOpen && (
+        <div className="sheet-bk on" onClick={handleCloseClosureSheet}>
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
-            <div className="st">急な休業の連絡</div>
-            <div className="ss">休業にする日を選んでください</div>
-            <div className="dsel">
-              {closureCandidates.map((d) => {
-                const key = toDateKey(d);
-                return (
-                  <button
-                    type="button"
-                    key={key}
-                    className={closureDate === key ? "on" : ""}
-                    onClick={() => handleSelectClosureDate(d)}
-                  >
-                    {formatClosureDate(d)}
-                  </button>
-                );
-              })}
-            </div>
+            <div className="st">休業を確定して配信</div>
+            <div className="ss">{closureDateLabel}</div>
             <textarea
               rows={5}
               value={closureText}
-              onChange={(e) => setClosureText(e.target.value)}
-              placeholder="日付を選ぶと文面が自動生成されます（編集できます）"
+              onChange={(e) => handleClosureTextChange(e.target.value)}
+              placeholder="配信文面を入力してください"
             />
             <div className="impact">
               <span>① LINEへ一斉配信</span>
@@ -449,7 +531,7 @@ export default function PriceTab({
               <button
                 type="button"
                 className="no"
-                onClick={() => setClosureOpen(false)}
+                onClick={handleCloseClosureSheet}
                 disabled={sending}
               >
                 やめる
@@ -457,8 +539,8 @@ export default function PriceTab({
               <button
                 type="button"
                 className="go warn"
-                onClick={handleConfirmClosure}
-                disabled={sending || !closureDate || !closureText.trim()}
+                onClick={handleConfirmClosureBroadcast}
+                disabled={sending || pendingClosureList.length === 0 || !closureText.trim()}
               >
                 {sending ? "配信中…" : "配信する"}
               </button>

@@ -144,18 +144,25 @@ export async function getCalendarOverridesForMonth(
 }
 
 /**
- * 急な休業の連絡: カレンダーに temp_closed を記録し、全友だちへテキストを配信する。
+ * 複数日をまとめて休業にし、1通の配信で通知する（単一日でも配列に1件入れて呼ぶ）。
+ * カレンダー上は常に temp_closed（臨時休業バッジ）として扱う。文面の緊急度（直近1週間以内かどうか）は
+ * 呼び出し側（クライアント）が判断してmessageに反映する。
  */
-export async function broadcastClosure(
-  dateKey: string,
+export async function broadcastClosureBulk(
+  dates: string[],
   message: string
 ): Promise<{ recipientCount: number }> {
+  if (dates.length === 0) throw new Error("休業にする日付が選択されていません");
   const supabase = supabaseAdmin();
 
-  const { error: overrideError } = await supabase
-    .from("calendar_overrides")
-    .upsert({ date: dateKey, status: "temp_closed", note: message }, { onConflict: "date" });
-  if (overrideError) throw new Error(`カレンダーの更新に失敗しました: ${overrideError.message}`);
+  const upserts = dates.map((dateKey) =>
+    supabase
+      .from("calendar_overrides")
+      .upsert({ date: dateKey, status: "temp_closed", note: message }, { onConflict: "date" })
+  );
+  const results = await Promise.all(upserts);
+  const failed = results.find((r) => r.error);
+  if (failed?.error) throw new Error(`カレンダーの更新に失敗しました: ${failed.error.message}`);
 
   const { count: recipientCount, error: countError } = await supabase
     .from("friends")
@@ -168,7 +175,7 @@ export async function broadcastClosure(
   const { error: broadcastError } = await supabase.from("broadcasts").insert({
     kind: "closure",
     recipient_count: recipientCount ?? 0,
-    snapshot: { date: dateKey, message },
+    snapshot: { dates, message },
   });
   if (broadcastError) throw new Error(`配信履歴の保存に失敗しました: ${broadcastError.message}`);
 
@@ -228,36 +235,18 @@ export async function addItem() {
   if (error) throw new Error(`品目の追加に失敗しました: ${error.message}`);
 }
 
-/** 隣り合う2品目の sort_order を入れ替える。 */
-export async function swapItemOrder(itemId: string, direction: "up" | "down") {
+/**
+ * ドラッグ&ドロップ後の並び順をまとめて保存する。
+ * orderedIds は新しい表示順どおりに並んだ品目idの配列。
+ */
+export async function setItemOrder(orderedIds: string[]) {
   const supabase = supabaseAdmin();
-  const { data: items, error } = await supabase
-    .from("items")
-    .select("id, sort_order")
-    .order("sort_order", { ascending: true });
-  if (error) throw new Error(`並び替えに失敗しました: ${error.message}`);
-
-  const list = items ?? [];
-  const index = list.findIndex((i) => i.id === itemId);
-  if (index === -1) return;
-
-  const targetIndex = direction === "up" ? index - 1 : index + 1;
-  if (targetIndex < 0 || targetIndex >= list.length) return;
-
-  const current = list[index];
-  const target = list[targetIndex];
-
-  const { error: error1 } = await supabase
-    .from("items")
-    .update({ sort_order: target.sort_order })
-    .eq("id", current.id);
-  if (error1) throw new Error(`並び替えに失敗しました: ${error1.message}`);
-
-  const { error: error2 } = await supabase
-    .from("items")
-    .update({ sort_order: current.sort_order })
-    .eq("id", target.id);
-  if (error2) throw new Error(`並び替えに失敗しました: ${error2.message}`);
+  const updates = orderedIds.map((id, index) =>
+    supabase.from("items").update({ sort_order: index + 1 }).eq("id", id)
+  );
+  const results = await Promise.all(updates);
+  const failed = results.find((r) => r.error);
+  if (failed?.error) throw new Error(`並び替えに失敗しました: ${failed.error.message}`);
 }
 
 // -----------------------------------------------------------------------

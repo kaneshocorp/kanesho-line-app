@@ -1,7 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useMemo, useState, useTransition } from "react";
 import type { FriendRow } from "@/lib/types";
 import { toggleFriendActive } from "@/app/admin/actions";
 
@@ -12,17 +11,29 @@ export default function FriendsTab({
   initialFriends: FriendRow[];
   showToast: (message: string) => void;
 }) {
-  const router = useRouter();
   const [, startTransition] = useTransition();
+  const [friends, setFriends] = useState<FriendRow[]>(initialFriends);
 
-  const activeCount = initialFriends.filter((f) => f.active).length;
+  const activeCount = useMemo(() => friends.filter((f) => f.active).length, [friends]);
 
   function handleToggle(friend: FriendRow) {
+    const nextActive = !friend.active;
+
+    // 楽観的にローカルstateを更新する
+    setFriends((prev) =>
+      prev.map((f) => (f.line_user_id === friend.line_user_id ? { ...f, active: nextActive } : f))
+    );
+
     startTransition(async () => {
       try {
-        await toggleFriendActive(friend.line_user_id, !friend.active);
-        router.refresh();
+        await toggleFriendActive(friend.line_user_id, nextActive);
       } catch (e) {
+        // ロールバック
+        setFriends((prev) =>
+          prev.map((f) =>
+            f.line_user_id === friend.line_user_id ? { ...f, active: friend.active } : f
+          )
+        );
         showToast(e instanceof Error ? e.message : "配信設定の更新に失敗しました");
       }
     });
@@ -34,9 +45,9 @@ export default function FriendsTab({
         <span>
           配信対象 <b>{activeCount}</b>人
         </span>
-        <span>全 {initialFriends.length} 人</span>
+        <span>全 {friends.length} 人</span>
       </div>
-      {initialFriends.map((friend) => (
+      {friends.map((friend) => (
         <div className={`fr-row${friend.active ? "" : " off"}`} key={friend.line_user_id}>
           <div className="fr-av">{friend.display_name.charAt(0)}</div>
           <div className="fr-nm">

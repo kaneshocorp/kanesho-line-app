@@ -1,7 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useMemo, useState, useTransition } from "react";
 import type { PhotoSubmissionRow } from "@/lib/types";
 import { togglePhotoDone } from "@/app/admin/actions";
 
@@ -21,21 +20,34 @@ export default function PhotosTab({
   initialPhotoSubmissions: PhotoSubmissionRow[];
   showToast: (message: string) => void;
 }) {
-  const router = useRouter();
   const [, startTransition] = useTransition();
+  const [photos, setPhotos] = useState<PhotoSubmissionRow[]>(initialPhotoSubmissions);
+  const [showDone, setShowDone] = useState(false);
 
   function handleToggle(photo: PhotoSubmissionRow) {
+    const nextDone = !photo.done;
+
+    // 楽観的にローカルstateを更新する
+    setPhotos((prev) => prev.map((p) => (p.id === photo.id ? { ...p, done: nextDone } : p)));
+
     startTransition(async () => {
       try {
-        await togglePhotoDone(photo.id, !photo.done);
-        router.refresh();
+        await togglePhotoDone(photo.id, nextDone);
       } catch (e) {
+        // ロールバック
+        setPhotos((prev) =>
+          prev.map((p) => (p.id === photo.id ? { ...p, done: photo.done } : p))
+        );
         showToast(e instanceof Error ? e.message : "対応状況の更新に失敗しました");
       }
     });
   }
 
-  if (initialPhotoSubmissions.length === 0) {
+  const pendingPhotos = useMemo(() => photos.filter((p) => !p.done), [photos]);
+  const donePhotos = useMemo(() => photos.filter((p) => p.done), [photos]);
+  const visiblePhotos = showDone ? [...pendingPhotos, ...donePhotos] : pendingPhotos;
+
+  if (photos.length === 0) {
     return (
       <div className="ad-card">
         <div className="ps-empty">まだ写真の依頼はありません</div>
@@ -49,8 +61,11 @@ export default function PhotosTab({
         <span>写真査定の依頼</span>
         <span className="hint">受信の新しい順</span>
       </div>
-      {initialPhotoSubmissions.map((photo) => (
-        <div className="ps-row" key={photo.id}>
+      {pendingPhotos.length === 0 && !showDone && (
+        <div className="ps-empty">未対応の依頼はありません</div>
+      )}
+      {visiblePhotos.map((photo) => (
+        <div className={`ps-row${photo.done ? " done" : ""}`} key={photo.id}>
           <div className="ps-thumb">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -71,6 +86,13 @@ export default function PhotosTab({
           </button>
         </div>
       ))}
+      {donePhotos.length > 0 && (
+        <button type="button" className="ps-toggle-done" onClick={() => setShowDone((v) => !v)}>
+          {showDone
+            ? "対応済みを隠す"
+            : `対応済み（${donePhotos.length}件）を表示`}
+        </button>
+      )}
     </div>
   );
 }
