@@ -22,6 +22,12 @@ function formatTime(t: string | null): string | null {
   return `${Number(hh)}:${mm}`;
 }
 
+/** カレンダーのマス目用に「9-15」のように短く営業時間を表す。 */
+function formatHourRange(openTime: string | null | undefined, closeTime: string | null | undefined): string {
+  if (!openTime || !closeTime) return "時短";
+  return `${Number(openTime.split(":")[0])}-${Number(closeTime.split(":")[0])}`;
+}
+
 /** "YYYY-MM" 形式をパースする。不正な場合は null。 */
 function parseMonthParam(value: string | undefined): { year: number; month: number } | null {
   if (!value) return null;
@@ -67,9 +73,9 @@ export default async function CalendarPage({
   const upcomingClosure = overrides.find(
     (o) => o.status === "temp_closed" && o.date >= todayKey
   );
-  const upcomingShortHours = overrides.find(
-    (o) => o.status === "short_hours" && o.date >= todayKey
-  );
+  const upcomingShortHoursList = overrides
+    .filter((o) => o.status === "short_hours" && o.date >= todayKey)
+    .sort((a, b) => a.date.localeCompare(b.date));
 
   const overridesByDate = overridesToMap(overrides);
   const fullOverridesByDate = overridesToFullMap(overrides);
@@ -131,19 +137,19 @@ export default async function CalendarPage({
         </div>
       )}
 
-      {upcomingShortHours && (() => {
+      {upcomingShortHoursList.map((o) => {
         const hours = effectiveHours(
-          new Date(`${upcomingShortHours.date}T00:00:00`),
+          new Date(`${o.date}T00:00:00`),
           fullOverridesByDate,
           config ?? { open_time: "09:00:00", close_time: "18:00:00" }
         );
         return (
-          <div className="us-banner">
-            ⚠ {formatOverrideDate(upcomingShortHours.date)}は{formatTime(hours.openTime)}〜
+          <div className="us-banner" key={o.date}>
+            ⚠ {formatOverrideDate(o.date)}は{formatTime(hours.openTime)}〜
             {formatTime(hours.closeTime)}の時短営業です
           </div>
         );
-      })()}
+      })}
 
       <div className="us-notice">
         営業時間 {openTime ?? "--"}–{closeTime ?? "--"}
@@ -187,7 +193,10 @@ export default async function CalendarPage({
               cell.status === "temp_closed"
                 ? "臨時休"
                 : cell.status === "short_hours"
-                ? "時短"
+                ? formatHourRange(
+                    fullOverridesByDate.get(toDateKey(cell.date))?.open_time,
+                    fullOverridesByDate.get(toDateKey(cell.date))?.close_time
+                  )
                 : cell.status === "holiday"
                 ? "祝 休業"
                 : cell.status === "closed"

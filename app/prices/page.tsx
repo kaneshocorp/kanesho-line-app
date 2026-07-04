@@ -98,9 +98,9 @@ export default async function PricesPage() {
   const upcomingClosure = overrides.find(
     (o) => o.status === "temp_closed" && o.date >= todayKey
   );
-  const upcomingShortHours = overrides.find(
-    (o) => o.status === "short_hours" && o.date >= todayKey
-  );
+  const upcomingShortHoursList = overrides
+    .filter((o) => o.status === "short_hours" && o.date >= todayKey)
+    .sort((a, b) => a.date.localeCompare(b.date));
   const fullOverridesByDate = overridesToFullMap(overrides);
 
   // 最終更新時刻: price_history の最新recorded_atがあればそれを使う。
@@ -137,19 +137,19 @@ export default async function PricesPage() {
         </div>
       )}
 
-      {upcomingShortHours && (() => {
+      {upcomingShortHoursList.map((o) => {
         const hours = effectiveHours(
-          new Date(`${upcomingShortHours.date}T00:00:00`),
+          new Date(`${o.date}T00:00:00`),
           fullOverridesByDate,
           config ?? { open_time: "09:00:00", close_time: "18:00:00" }
         );
         return (
-          <div className="us-banner">
-            ⚠ {formatOverrideDate(upcomingShortHours.date)}は{formatTime(hours.openTime)}〜
+          <div className="us-banner" key={o.date}>
+            ⚠ {formatOverrideDate(o.date)}は{formatTime(hours.openTime)}〜
             {formatTime(hours.closeTime)}の時短営業です
           </div>
         );
-      })()}
+      })}
 
       <div className="us-notice">
         <div className="us-notice-row">

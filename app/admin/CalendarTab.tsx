@@ -2,7 +2,20 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import type { CalendarOverrideRow, BusinessConfigRow, EffectiveCalendarStatus } from "@/lib/types";
-import { effectiveStatus, naturalStatus, overridesToMap, toDateKey, holidayName } from "@/lib/calendar";
+import {
+  effectiveStatus,
+  naturalStatus,
+  overridesToMap,
+  overridesToFullMap,
+  toDateKey,
+  holidayName,
+} from "@/lib/calendar";
+
+/** カレンダーのマス目用に「9-15」のように短く営業時間を表す。 */
+function formatHourRange(openTime: string | null | undefined, closeTime: string | null | undefined): string {
+  if (!openTime || !closeTime) return "時短";
+  return `${Number(openTime.split(":")[0])}-${Number(closeTime.split(":")[0])}`;
+}
 import {
   toggleCalendarDay,
   broadcastClosureBulk,
@@ -179,6 +192,11 @@ export default function CalendarTab({
 
   const overridesByDate = useMemo(
     () => overridesToMap(overridesByMonth[viewMonthKey] ?? []),
+    [overridesByMonth, viewMonthKey]
+  );
+
+  const fullOverridesByDate = useMemo(
+    () => overridesToFullMap(overridesByMonth[viewMonthKey] ?? []),
     [overridesByMonth, viewMonthKey]
   );
 
@@ -474,7 +492,10 @@ export default function CalendarTab({
               open: "営業",
               closed: "休業",
               temp_closed: "臨時休",
-              short_hours: "時短",
+              short_hours: formatHourRange(
+                fullOverridesByDate.get(dateKey)?.open_time,
+                fullOverridesByDate.get(dateKey)?.close_time
+              ),
               holiday: "祝 休業",
             };
             const label = isPending || isPendingShort ? "選択中" : statusLabel[status];
