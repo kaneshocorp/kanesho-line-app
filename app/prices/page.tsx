@@ -1,6 +1,6 @@
 import { supabasePublic } from "@/lib/supabase/public";
-import { effectiveStatus, overridesToMap, toDateKey } from "@/lib/calendar";
-import type { BusinessConfigRow, CalendarOverrideRow, CalendarStatus } from "@/lib/types";
+import { toDateKey } from "@/lib/calendar";
+import type { BusinessConfigRow, CalendarOverrideRow } from "@/lib/types";
 import PriceChart, { type ChartItem } from "./PriceChart";
 
 export const dynamic = "force-dynamic";
@@ -113,30 +113,6 @@ export default async function PricesPage() {
     updatedAtIso = points[points.length - 1]?.recorded_at ?? null;
   }
 
-  const overridesByDate = overridesToMap(overrides);
-
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  const firstOfMonth = new Date(year, month, 1);
-  const startWeekday = firstOfMonth.getDay();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-  const calendarCells: { date: Date | null; status: CalendarStatus | null; isToday: boolean; isPast: boolean }[] = [];
-  for (let i = 0; i < startWeekday; i++) {
-    calendarCells.push({ date: null, status: null, isToday: false, isPast: false });
-  }
-  for (let day = 1; day <= daysInMonth; day++) {
-    const d = new Date(year, month, day);
-    const status = config ? effectiveStatus(d, overridesByDate, config) : null;
-    calendarCells.push({
-      date: d,
-      status,
-      isToday: toDateKey(d) === todayKey,
-      isPast: toDateKey(d) < todayKey,
-    });
-  }
-
   const totalCount = prices.length;
   const openTime = config ? formatTime(config.open_time) : null;
   const closeTime = config ? formatTime(config.close_time) : null;
@@ -147,7 +123,7 @@ export default async function PricesPage() {
     <div className="page">
       <header className="us-hd">
         <div className="co">有限会社金山商店｜きちんと計量</div>
-        <h1>本日の買取価格</h1>
+        <h1>現在の買取価格</h1>
         <div className="upd">{formatUpdatedAt(updatedAtIso)}</div>
       </header>
 
@@ -196,49 +172,6 @@ export default async function PricesPage() {
           <PriceChart items={chartItems} />
         </section>
       )}
-
-      <section className="us-card">
-        <div className="cap">
-          <span>営業カレンダー</span>
-        </div>
-        <div className="cal">
-          {WEEKDAY_JA.map((w) => (
-            <div className="h7" key={w}>
-              {w}
-            </div>
-          ))}
-          {calendarCells.map((cell, i) => {
-            if (!cell.date) {
-              return <div className="c blank" key={`blank-${i}`} />;
-            }
-            const classes = ["c", cell.status ?? "open"];
-            if (cell.isPast) classes.push("past");
-            if (cell.isToday) classes.push("today");
-            const statusLabel =
-              cell.status === "temp_closed" ? "臨時休" : cell.status === "closed" ? "休" : "";
-            return (
-              <div className={classes.join(" ")} key={cell.date.toISOString()}>
-                {cell.date.getDate()}
-                <span className="s">{statusLabel}</span>
-              </div>
-            );
-          })}
-        </div>
-        <div className="legend">
-          <span>
-            <i style={{ background: "#f0f6ec" }} />
-            営業
-          </span>
-          <span>
-            <i style={{ background: "#fbedea" }} />
-            定休・休業
-          </span>
-          <span>
-            <i style={{ background: "#fcf3df" }} />
-            臨時休業
-          </span>
-        </div>
-      </section>
 
       <section className="us-card">
         <div className="cap">

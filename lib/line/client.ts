@@ -83,7 +83,7 @@ export function buildPriceFlexMessage(
       backgroundColor: "#24455C",
       paddingAll: "16px",
       contents: [
-        { type: "text", text: "今週の買取価格", color: "#FFFFFF", weight: "bold", size: "md" },
+        { type: "text", text: "現在の買取価格", color: "#FFFFFF", weight: "bold", size: "md" },
         { type: "text", text: updatedAtLabel, color: "#B9CDDC", size: "xs", margin: "sm" },
       ],
     },
@@ -113,7 +113,7 @@ export function buildPriceFlexMessage(
 
   return {
     type: "flex",
-    altText: `今週の買取価格（${updatedAtLabel}）`,
+    altText: `現在の買取価格（${updatedAtLabel}）`,
     contents: bubble,
   };
 }

@@ -2,19 +2,17 @@
  * リッチメニュー自動セットアップスクリプト。
  *
  * 実行方法:
- *   npx tsx scripts/setup-richmenu.ts
+ *   npm run setup:richmenu
  *
- * .env.local から環境変数を読み込んだうえで実行してください。例:
- *   node --env-file=.env.local -r tsx/cjs scripts/setup-richmenu.ts
- * もしくは事前に環境変数をexportしてから実行してください。
+ * .env.local から環境変数を読み込んだうえで実行してください。
  *
  * 6つのボタン（左上から右下へ 3列×2行、各 833x843）:
- *   1. 今週の買取価格   (uri)     -> {NEXT_PUBLIC_SITE_URL}/prices
- *   2. 営業カレンダー   (uri)     -> {NEXT_PUBLIC_SITE_URL}/prices
+ *   1. 現在の買取価格     (uri)     -> {NEXT_PUBLIC_SITE_URL}/prices
+ *   2. 営業カレンダー     (uri)     -> {NEXT_PUBLIC_SITE_URL}/calendar
  *   3. 写真でかんたん査定 (message) -> "写真でかんたん査定"
- *   4. 店舗・アクセス   (uri)     -> https://maps.app.goo.gl/SmSwpLT9U1drWpYf7
- *   5. 品目一覧         (uri)     -> {NEXT_PUBLIC_SITE_URL}/prices
- *   6. 電話で相談       (uri)     -> tel:0827-22-7580
+ *   4. 店舗・アクセス     (uri)     -> https://maps.app.goo.gl/SmSwpLT9U1drWpYf7
+ *   5. 会社概要           (uri)     -> {NEXT_PUBLIC_SITE_URL}/about
+ *   6. 電話で相談         (uri)     -> tel:0827-22-7580
  */
 import { messagingApi } from "@line/bot-sdk";
 import sharp from "sharp";
@@ -29,8 +27,8 @@ const COL_WIDTH = 833;
 const ROW_HEIGHT = 843;
 
 type ButtonDef = {
-  label: string;
-  icon: "yen" | "calendar" | "camera" | "pin" | "list" | "phone";
+  label: string[]; // 1〜2行に分けたラベル
+  icon: "yen" | "calendar" | "camera" | "pin" | "building" | "phone";
   accent?: boolean;
   action: messagingApi.Action;
 };
@@ -49,23 +47,23 @@ function requireEnv(name: string): string {
 function buildButtons(siteUrl: string): ButtonDef[] {
   return [
     {
-      label: "今週の買取価格",
+      label: ["現在の", "買取価格"],
       icon: "yen",
       accent: true,
-      action: { type: "uri", label: "今週の買取価格", uri: `${siteUrl}/prices` },
+      action: { type: "uri", label: "現在の買取価格", uri: `${siteUrl}/prices` },
     },
     {
-      label: "営業カレンダー",
+      label: ["営業", "カレンダー"],
       icon: "calendar",
-      action: { type: "uri", label: "営業カレンダー", uri: `${siteUrl}/prices` },
+      action: { type: "uri", label: "営業カレンダー", uri: `${siteUrl}/calendar` },
     },
     {
-      label: "写真でかんたん査定",
+      label: ["写真で", "かんたん査定"],
       icon: "camera",
       action: { type: "message", label: "写真でかんたん査定", text: "写真でかんたん査定" },
     },
     {
-      label: "店舗・アクセス",
+      label: ["店舗・", "アクセス"],
       icon: "pin",
       action: {
         type: "uri",
@@ -74,12 +72,12 @@ function buildButtons(siteUrl: string): ButtonDef[] {
       },
     },
     {
-      label: "品目一覧",
-      icon: "list",
-      action: { type: "uri", label: "品目一覧", uri: `${siteUrl}/prices` },
+      label: ["会社概要"],
+      icon: "building",
+      action: { type: "uri", label: "会社概要", uri: `${siteUrl}/about` },
     },
     {
-      label: "電話で相談",
+      label: ["電話で相談"],
       icon: "phone",
       action: { type: "uri", label: "電話で相談", uri: "tel:0827-22-7580" },
     },
@@ -88,33 +86,36 @@ function buildButtons(siteUrl: string): ButtonDef[] {
 
 /** アイコン風の簡単な図形をSVGで描く（凝ったアイコンでなくラベルが読めれば十分）。 */
 function iconSvg(icon: ButtonDef["icon"], cx: number, cy: number, color: string): string {
-  const s = 44; // 図形の基準サイズ
+  const s = 78; // 図形の基準サイズ
   switch (icon) {
     case "yen":
-      return `<text x="${cx}" y="${cy + s * 0.4}" font-size="${s * 1.8}" font-weight="700" text-anchor="middle" fill="${color}" font-family="sans-serif">¥</text>`;
+      return `<text x="${cx}" y="${cy + s * 0.4}" font-size="${s * 1.9}" font-weight="700" text-anchor="middle" fill="${color}" font-family="sans-serif">¥</text>`;
     case "calendar":
       return `
-        <rect x="${cx - s}" y="${cy - s * 0.8}" width="${s * 2}" height="${s * 1.8}" rx="8" fill="none" stroke="${color}" stroke-width="6"/>
-        <line x1="${cx - s}" y1="${cy - s * 0.3}" x2="${cx + s}" y2="${cy - s * 0.3}" stroke="${color}" stroke-width="6"/>
-        <line x1="${cx - s * 0.5}" y1="${cy - s * 1.1}" x2="${cx - s * 0.5}" y2="${cy - s * 0.6}" stroke="${color}" stroke-width="6" stroke-linecap="round"/>
-        <line x1="${cx + s * 0.5}" y1="${cy - s * 1.1}" x2="${cx + s * 0.5}" y2="${cy - s * 0.6}" stroke="${color}" stroke-width="6" stroke-linecap="round"/>
+        <rect x="${cx - s}" y="${cy - s * 0.8}" width="${s * 2}" height="${s * 1.8}" rx="12" fill="none" stroke="${color}" stroke-width="10"/>
+        <line x1="${cx - s}" y1="${cy - s * 0.3}" x2="${cx + s}" y2="${cy - s * 0.3}" stroke="${color}" stroke-width="10"/>
+        <line x1="${cx - s * 0.5}" y1="${cy - s * 1.1}" x2="${cx - s * 0.5}" y2="${cy - s * 0.6}" stroke="${color}" stroke-width="10" stroke-linecap="round"/>
+        <line x1="${cx + s * 0.5}" y1="${cy - s * 1.1}" x2="${cx + s * 0.5}" y2="${cy - s * 0.6}" stroke="${color}" stroke-width="10" stroke-linecap="round"/>
       `;
     case "camera":
       return `
-        <rect x="${cx - s}" y="${cy - s * 0.6}" width="${s * 2}" height="${s * 1.4}" rx="10" fill="none" stroke="${color}" stroke-width="6"/>
-        <circle cx="${cx}" cy="${cy + s * 0.1}" r="${s * 0.5}" fill="none" stroke="${color}" stroke-width="6"/>
-        <rect x="${cx - s * 0.35}" y="${cy - s * 0.95}" width="${s * 0.7}" height="${s * 0.35}" rx="4" fill="${color}"/>
+        <rect x="${cx - s}" y="${cy - s * 0.6}" width="${s * 2}" height="${s * 1.4}" rx="14" fill="none" stroke="${color}" stroke-width="10"/>
+        <circle cx="${cx}" cy="${cy + s * 0.1}" r="${s * 0.5}" fill="none" stroke="${color}" stroke-width="10"/>
+        <rect x="${cx - s * 0.35}" y="${cy - s * 0.95}" width="${s * 0.7}" height="${s * 0.35}" rx="6" fill="${color}"/>
       `;
     case "pin":
       return `
-        <path d="M ${cx} ${cy - s * 1.1} C ${cx + s} ${cy - s * 1.1} ${cx + s} ${cy} ${cx} ${cy + s * 1.1} C ${cx - s} ${cy} ${cx - s} ${cy - s * 1.1} ${cx} ${cy - s * 1.1} Z" fill="none" stroke="${color}" stroke-width="6"/>
+        <path d="M ${cx} ${cy - s * 1.1} C ${cx + s} ${cy - s * 1.1} ${cx + s} ${cy} ${cx} ${cy + s * 1.1} C ${cx - s} ${cy} ${cx - s} ${cy - s * 1.1} ${cx} ${cy - s * 1.1} Z" fill="none" stroke="${color}" stroke-width="10"/>
         <circle cx="${cx}" cy="${cy - s * 0.35}" r="${s * 0.32}" fill="${color}"/>
       `;
-    case "list":
+    case "building":
       return `
-        <line x1="${cx - s}" y1="${cy - s * 0.7}" x2="${cx + s}" y2="${cy - s * 0.7}" stroke="${color}" stroke-width="7" stroke-linecap="round"/>
-        <line x1="${cx - s}" y1="${cy}" x2="${cx + s}" y2="${cy}" stroke="${color}" stroke-width="7" stroke-linecap="round"/>
-        <line x1="${cx - s}" y1="${cy + s * 0.7}" x2="${cx + s}" y2="${cy + s * 0.7}" stroke="${color}" stroke-width="7" stroke-linecap="round"/>
+        <rect x="${cx - s * 0.75}" y="${cy - s * 1.1}" width="${s * 1.5}" height="${s * 2.1}" rx="6" fill="none" stroke="${color}" stroke-width="10"/>
+        <line x1="${cx - s * 0.4}" y1="${cy - s * 0.65}" x2="${cx - s * 0.15}" y2="${cy - s * 0.65}" stroke="${color}" stroke-width="9"/>
+        <line x1="${cx + s * 0.15}" y1="${cy - s * 0.65}" x2="${cx + s * 0.4}" y2="${cy - s * 0.65}" stroke="${color}" stroke-width="9"/>
+        <line x1="${cx - s * 0.4}" y1="${cy - s * 0.15}" x2="${cx - s * 0.15}" y2="${cy - s * 0.15}" stroke="${color}" stroke-width="9"/>
+        <line x1="${cx + s * 0.15}" y1="${cy - s * 0.15}" x2="${cx + s * 0.4}" y2="${cy - s * 0.15}" stroke="${color}" stroke-width="9"/>
+        <rect x="${cx - s * 0.22}" y="${cy + s * 0.35}" width="${s * 0.44}" height="${s * 0.65}" fill="${color}"/>
       `;
     case "phone":
       return `
@@ -127,6 +128,19 @@ function iconSvg(icon: ButtonDef["icon"], cx: number, cy: number, color: string)
   }
 }
 
+function labelSvg(lines: string[], cx: number, baseY: number, color: string): string {
+  const fontSize = 82;
+  const lineHeight = 96;
+  // 2行なら中央揃えのため少し上にずらす
+  const startY = lines.length === 2 ? baseY - lineHeight / 2 : baseY;
+  return lines
+    .map(
+      (line, i) =>
+        `<text x="${cx}" y="${startY + i * lineHeight}" font-size="${fontSize}" font-weight="700" text-anchor="middle" fill="${color}" font-family="sans-serif">${line}</text>`
+    )
+    .join("\n");
+}
+
 function buildMenuSvg(buttons: ButtonDef[]): string {
   const cells = buttons
     .map((btn, i) => {
@@ -135,7 +149,8 @@ function buildMenuSvg(buttons: ButtonDef[]): string {
       const x = col * COL_WIDTH;
       const y = row * ROW_HEIGHT;
       const cx = x + COL_WIDTH / 2;
-      const cy = y + ROW_HEIGHT / 2 - 60;
+      const iconCy = y + ROW_HEIGHT * 0.36;
+      const labelBaseY = y + ROW_HEIGHT * 0.78;
       const labelColor = btn.accent ? BRAND_BG : WHITE;
       const cellFill = btn.accent ? ACCENT : "none";
       const iconColor = btn.accent ? BRAND_BG : WHITE;
@@ -144,8 +159,8 @@ function buildMenuSvg(buttons: ButtonDef[]): string {
         <g>
           ${cellFill !== "none" ? `<rect x="${x}" y="${y}" width="${COL_WIDTH}" height="${ROW_HEIGHT}" fill="${cellFill}"/>` : ""}
           <rect x="${x}" y="${y}" width="${COL_WIDTH}" height="${ROW_HEIGHT}" fill="none" stroke="#ffffff33" stroke-width="2"/>
-          ${iconSvg(btn.icon, cx, cy, iconColor)}
-          <text x="${cx}" y="${y + ROW_HEIGHT - 90}" font-size="52" font-weight="700" text-anchor="middle" fill="${labelColor}" font-family="sans-serif">${btn.label}</text>
+          ${iconSvg(btn.icon, cx, iconCy, iconColor)}
+          ${labelSvg(btn.label, cx, labelBaseY, labelColor)}
         </g>
       `;
     })
