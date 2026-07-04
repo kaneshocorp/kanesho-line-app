@@ -13,8 +13,12 @@ export default function FriendsTab({
 }) {
   const [, startTransition] = useTransition();
   const [friends, setFriends] = useState<FriendRow[]>(initialFriends);
+  const [showInactive, setShowInactive] = useState(false);
 
   const activeCount = useMemo(() => friends.filter((f) => f.active).length, [friends]);
+  const activeFriends = useMemo(() => friends.filter((f) => f.active), [friends]);
+  const inactiveFriends = useMemo(() => friends.filter((f) => !f.active), [friends]);
+  const visibleFriends = showInactive ? [...activeFriends, ...inactiveFriends] : activeFriends;
 
   function handleToggle(friend: FriendRow) {
     const nextActive = !friend.active;
@@ -47,7 +51,10 @@ export default function FriendsTab({
         </span>
         <span>全 {friends.length} 人</span>
       </div>
-      {friends.map((friend) => (
+      {activeFriends.length === 0 && !showInactive && (
+        <div className="ps-empty">配信対象の友だちはいません</div>
+      )}
+      {visibleFriends.map((friend) => (
         <div className={`fr-row${friend.active ? "" : " off"}`} key={friend.line_user_id}>
           <div className="fr-av">{friend.display_name.charAt(0)}</div>
           <div className="fr-nm">
@@ -65,6 +72,17 @@ export default function FriendsTab({
           </button>
         </div>
       ))}
+      {inactiveFriends.length > 0 && (
+        <button
+          type="button"
+          className="ps-toggle-done"
+          onClick={() => setShowInactive((v) => !v)}
+        >
+          {showInactive
+            ? "配信停止中を隠す"
+            : `配信停止中（${inactiveFriends.length}件）を表示`}
+        </button>
+      )}
     </div>
   );
 }

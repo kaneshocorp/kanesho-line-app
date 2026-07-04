@@ -19,7 +19,6 @@ import { CSS } from "@dnd-kit/utilities";
 import type { ItemRow } from "@/lib/types";
 import {
   updateItemName,
-  updateItemPrice,
   toggleItemActive,
   deleteItem,
   addItem,
@@ -43,9 +42,6 @@ export default function ItemsTab({
   const [names, setNames] = useState<Record<string, string>>(
     Object.fromEntries(initialItems.map((i) => [i.id, i.name]))
   );
-  const [priceInputs, setPriceInputs] = useState<Record<string, number>>(
-    Object.fromEntries(initialItems.map((i) => [i.id, i.current_price]))
-  );
   const [busy, setBusy] = useState(false);
 
   // addItem完了後のrouter.refresh()でinitialItemsという新しい配列が親から渡された時だけ、
@@ -56,7 +52,6 @@ export default function ItemsTab({
     setSyncedInitialItems(initialItems);
     setItems([...initialItems].sort((a, b) => a.sort_order - b.sort_order));
     setNames(Object.fromEntries(initialItems.map((i) => [i.id, i.name])));
-    setPriceInputs(Object.fromEntries(initialItems.map((i) => [i.id, i.current_price])));
   }
 
   const sensors = useSensors(
@@ -75,23 +70,6 @@ export default function ItemsTab({
         setItems(previous);
         setNames(Object.fromEntries(previous.map((i) => [i.id, i.name])));
         showToast(e instanceof Error ? e.message : "品目名の更新に失敗しました");
-      }
-    });
-  }
-
-  function handlePriceBlur(itemId: string) {
-    const value = priceInputs[itemId] ?? 0;
-    const previous = items;
-    setItems((prev) =>
-      prev.map((i) => (i.id === itemId ? { ...i, current_price: value } : i))
-    );
-    startTransition(async () => {
-      try {
-        await updateItemPrice(itemId, value);
-      } catch (e) {
-        setItems(previous);
-        setPriceInputs(Object.fromEntries(previous.map((i) => [i.id, i.current_price])));
-        showToast(e instanceof Error ? e.message : "価格の更新に失敗しました");
       }
     });
   }
@@ -166,7 +144,6 @@ export default function ItemsTab({
     };
     setItems((prev) => [...prev, placeholder]);
     setNames((prev) => ({ ...prev, [tempId]: placeholder.name }));
-    setPriceInputs((prev) => ({ ...prev, [tempId]: placeholder.current_price }));
 
     try {
       // addItem は新規行のidを返さないため、プレースホルダーを実データへ
@@ -177,11 +154,6 @@ export default function ItemsTab({
     } catch (e) {
       setItems((prev) => prev.filter((i) => i.id !== tempId));
       setNames((prev) => {
-        const next = { ...prev };
-        delete next[tempId];
-        return next;
-      });
-      setPriceInputs((prev) => {
         const next = { ...prev };
         delete next[tempId];
         return next;
@@ -207,17 +179,9 @@ export default function ItemsTab({
                 key={item.id}
                 item={item}
                 name={names[item.id] ?? ""}
-                price={priceInputs[item.id] ?? 0}
                 disabled={isPending}
                 onNameChange={(value) => setNames((prev) => ({ ...prev, [item.id]: value }))}
                 onNameBlur={() => handleNameBlur(item.id)}
-                onPriceChange={(value) =>
-                  setPriceInputs((prev) => ({
-                    ...prev,
-                    [item.id]: Math.max(0, Math.round(Number(value) || 0)),
-                  }))
-                }
-                onPriceBlur={() => handlePriceBlur(item.id)}
                 onToggleActive={() => handleToggleActive(item)}
                 onDelete={() => handleDelete(item)}
               />
@@ -235,23 +199,17 @@ export default function ItemsTab({
 function SortableItemRow({
   item,
   name,
-  price,
   disabled,
   onNameChange,
   onNameBlur,
-  onPriceChange,
-  onPriceBlur,
   onToggleActive,
   onDelete,
 }: {
   item: ItemRow;
   name: string;
-  price: number;
   disabled?: boolean;
   onNameChange: (value: string) => void;
   onNameBlur: () => void;
-  onPriceChange: (value: string) => void;
-  onPriceBlur: () => void;
   onToggleActive: () => void;
   onDelete: () => void;
 }) {
@@ -278,15 +236,6 @@ function SortableItemRow({
         disabled={disabled}
         onChange={(e) => onNameChange(e.target.value)}
         onBlur={onNameBlur}
-      />
-      <input
-        className="im-price"
-        type="number"
-        inputMode="numeric"
-        value={price}
-        disabled={disabled}
-        onChange={(e) => onPriceChange(e.target.value)}
-        onBlur={onPriceBlur}
       />
       <button
         type="button"

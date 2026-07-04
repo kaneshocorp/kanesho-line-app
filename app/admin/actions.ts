@@ -275,4 +275,33 @@ export async function togglePhotoDone(photoId: string, done: boolean) {
   if (error) throw new Error(`対応状況の更新に失敗しました: ${error.message}`);
 }
 
+// -----------------------------------------------------------------------
+// タブ5: お知らせ（自由配信）
+// -----------------------------------------------------------------------
+
+/** 価格配信・休業連絡以外の、自由な文面を全友だちへ配信する。 */
+export async function broadcastAnnouncement(message: string): Promise<{ recipientCount: number }> {
+  const trimmed = message.trim();
+  if (!trimmed) throw new Error("メッセージを入力してください");
+
+  const supabase = supabaseAdmin();
+
+  const { count: recipientCount, error: countError } = await supabase
+    .from("friends")
+    .select("*", { count: "exact", head: true })
+    .eq("active", true);
+  if (countError) throw new Error(`配信対象人数の取得に失敗しました: ${countError.message}`);
+
+  await lineClient().broadcast({ messages: [buildTextMessage(trimmed)] });
+
+  const { error: broadcastError } = await supabase.from("broadcasts").insert({
+    kind: "announcement",
+    recipient_count: recipientCount ?? 0,
+    snapshot: { message: trimmed },
+  });
+  if (broadcastError) throw new Error(`配信履歴の保存に失敗しました: ${broadcastError.message}`);
+
+  return { recipientCount: recipientCount ?? 0 };
+}
+
 export { toDateKey };

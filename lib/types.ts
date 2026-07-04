@@ -56,7 +56,7 @@ export type BusinessConfigRow = {
   break_end: string | null;
 };
 
-export type BroadcastKind = "price" | "closure";
+export type BroadcastKind = "price" | "closure" | "announcement";
 
 export type BroadcastRow = {
   id: string;

@@ -12,14 +12,16 @@ import PriceTab from "@/app/admin/PriceTab";
 import ItemsTab from "@/app/admin/ItemsTab";
 import FriendsTab from "@/app/admin/FriendsTab";
 import PhotosTab from "@/app/admin/PhotosTab";
+import AnnouncementTab from "@/app/admin/AnnouncementTab";
 
-type TabKey = "price" | "items" | "friends" | "photos";
+type TabKey = "price" | "items" | "friends" | "photos" | "announcement";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "price", label: "価格配信" },
   { key: "items", label: "品目管理" },
   { key: "friends", label: "友だち" },
   { key: "photos", label: "写真査定" },
+  { key: "announcement", label: "お知らせ" },
 ];
 
 export default function AdminApp({
@@ -79,6 +81,7 @@ export default function AdminApp({
       {tab === "photos" && (
         <PhotosTab initialPhotoSubmissions={initialPhotoSubmissions} showToast={showToast} />
       )}
+      {tab === "announcement" && <AnnouncementTab showToast={showToast} />}
 
       <div className={`toast${toast ? " on" : ""}`}>{toast}</div>
     </div>

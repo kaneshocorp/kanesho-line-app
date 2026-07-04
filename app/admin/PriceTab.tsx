@@ -42,6 +42,11 @@ function diffBadge(item: ItemRow) {
   return <span className="dif flat">±0</span>;
 }
 
+/** 半角数字のみ（空文字も許容）かどうかを判定する。 */
+function isDigitsOnly(value: string): boolean {
+  return /^[0-9]*$/.test(value);
+}
+
 /** 「7/17（金）」「7/20（月・祝）」のように日付を整形する。祝日なら祝日名の代わりに「祝」を付す。 */
 function formatClosureDate(date: Date) {
   const w = WEEKDAY_LABELS[date.getDay()];
@@ -95,8 +100,10 @@ export default function PriceTab({
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
-  const [prices, setPrices] = useState<Record<string, number>>(
-    Object.fromEntries(initialItems.map((i) => [i.id, i.current_price]))
+  const [prices, setPrices] = useState<Record<string, string>>(
+    Object.fromEntries(
+      initialItems.map((i) => [i.id, i.current_price > 0 ? String(i.current_price) : ""])
+    )
   );
   const [previewOpen, setPreviewOpen] = useState(false);
   const [closureSheetOpen, setClosureSheetOpen] = useState(false);
@@ -191,15 +198,17 @@ export default function PriceTab({
   }, [viewMonth]);
 
   function handlePriceInput(itemId: string, value: string) {
-    const num = Math.max(0, Math.round(Number(value) || 0));
-    setPrices((prev) => ({ ...prev, [itemId]: num }));
+    if (!isDigitsOnly(value)) return;
+    setPrices((prev) => ({ ...prev, [itemId]: value }));
   }
 
   function handlePriceBlur(itemId: string) {
-    const value = prices[itemId] ?? 0;
+    const raw = prices[itemId] ?? "";
+    const current = Math.max(0, Math.round(Number(raw) || 0));
+    setPrices((prev) => ({ ...prev, [itemId]: current > 0 ? String(current) : "" }));
     startTransition(async () => {
       try {
-        await updateCurrentPrice(itemId, value);
+        await updateCurrentPrice(itemId, current);
         router.refresh();
       } catch (e) {
         showToast(e instanceof Error ? e.message : "価格の保存に失敗しました");
@@ -262,16 +271,19 @@ export default function PriceTab({
   }
 
   const changes = visibleItems
-    .filter((i) => i.current_price > 0)
-    .map((i) => ({
-      name: i.name,
-      unit: i.unit,
-      prevPrice: i.published_price,
-      newPrice: prices[i.id] ?? i.current_price,
-      changed: i.published_price !== (prices[i.id] ?? i.current_price),
-    }));
+    .filter((i) => Number(prices[i.id] || 0) > 0)
+    .map((i) => {
+      const newPrice = Number(prices[i.id] || 0);
+      return {
+        name: i.name,
+        unit: i.unit,
+        prevPrice: i.published_price,
+        newPrice,
+        changed: i.published_price !== newPrice,
+      };
+    });
   const changedItems = changes.filter((c) => c.changed);
-  const unfilledItems = visibleItems.filter((i) => !(prices[i.id] > 0));
+  const unfilledItems = visibleItems.filter((i) => !(Number(prices[i.id] || 0) > 0));
 
   async function handleConfirmBroadcast() {
     setSending(true);
@@ -361,13 +373,13 @@ export default function PriceTab({
             </div>
             <input
               className="pnum"
-              type="number"
+              type="text"
               inputMode="numeric"
-              value={prices[item.id] ?? 0}
+              value={prices[item.id] ?? ""}
               onChange={(e) => handlePriceInput(item.id, e.target.value)}
               onBlur={() => handlePriceBlur(item.id)}
             />
-            {diffBadge({ ...item, current_price: prices[item.id] ?? item.current_price })}
+            {diffBadge({ ...item, current_price: Number(prices[item.id] || 0) })}
           </div>
         ))}
       </div>
