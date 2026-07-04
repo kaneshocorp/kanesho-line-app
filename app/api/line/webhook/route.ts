@@ -44,7 +44,7 @@ async function handleFollow(event: webhook.FollowEvent) {
   if (event.replyToken) {
     await lineClient().replyMessage({
       replyToken: event.replyToken,
-      messages: [buildTextMessage("友だち追加ありがとうございます。お名前（本名）を教えてください。")],
+      messages: [buildTextMessage("友だち追加ありがとうございます。お名前を教えてください。")],
     });
   }
 }

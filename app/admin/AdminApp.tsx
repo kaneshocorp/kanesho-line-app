@@ -9,15 +9,17 @@ import type {
   BusinessConfigRow,
 } from "@/lib/types";
 import PriceTab from "@/app/admin/PriceTab";
+import CalendarTab from "@/app/admin/CalendarTab";
 import ItemsTab from "@/app/admin/ItemsTab";
 import FriendsTab from "@/app/admin/FriendsTab";
 import PhotosTab from "@/app/admin/PhotosTab";
 import AnnouncementTab from "@/app/admin/AnnouncementTab";
 
-type TabKey = "price" | "items" | "friends" | "photos" | "announcement";
+type TabKey = "price" | "calendar" | "items" | "friends" | "photos" | "announcement";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "price", label: "価格配信" },
+  { key: "calendar", label: "営業カレンダー" },
   { key: "items", label: "品目管理" },
   { key: "friends", label: "友だち" },
   { key: "photos", label: "写真査定" },
@@ -68,9 +70,9 @@ export default function AdminApp({
         ))}
       </div>
 
-      {tab === "price" && (
-        <PriceTab
-          initialItems={initialItems}
+      {tab === "price" && <PriceTab initialItems={initialItems} showToast={showToast} />}
+      {tab === "calendar" && (
+        <CalendarTab
           initialCalendarOverrides={initialCalendarOverrides}
           businessConfig={businessConfig}
           showToast={showToast}

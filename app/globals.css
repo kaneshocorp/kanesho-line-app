@@ -1144,3 +1144,27 @@ a:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 1px;
 }
+
+/* ---------- desktop / PC layout ---------- */
+@media (min-width: 720px) {
+  .page {
+    max-width: 720px;
+  }
+  .sheet-bk.on {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .sheet {
+    position: static;
+    left: auto;
+    bottom: auto;
+    transform: none;
+    width: 100%;
+    max-width: 480px;
+    border-radius: 20px;
+    max-height: 80vh;
+  }
+}
+
