@@ -328,7 +328,7 @@ export default function PriceTab({
               open: "営業",
               closed: "休業",
               temp_closed: "臨時休",
-              holiday: "祝",
+              holiday: "祝 休業",
             };
             return (
               <button

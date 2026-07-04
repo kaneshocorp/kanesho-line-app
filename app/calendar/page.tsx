@@ -169,7 +169,7 @@ export default async function CalendarPage({
               cell.status === "temp_closed"
                 ? "臨時休"
                 : cell.status === "holiday"
-                ? "祝"
+                ? "祝 休業"
                 : cell.status === "closed"
                 ? "休"
                 : "";
