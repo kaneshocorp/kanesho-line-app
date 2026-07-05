@@ -36,6 +36,11 @@ function formatOverrideDate(dateStr: string): string {
   return `${m}月${day}日（${w}）`;
 }
 
+/** 小数の丸め誤差を避けるため、小数第2位までに丸める。 */
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
 function diffClass(diff: number): string {
   if (diff > 0) return "dif up";
   if (diff < 0) return "dif down";
@@ -184,7 +189,7 @@ export default async function PricesPage() {
         </div>
         {prices.map((item) => {
           const prev = item.published_price_prev ?? item.published_price;
-          const diff = item.published_price - prev;
+          const diff = round2(item.published_price - prev);
           return (
             <div className="us-tr" key={item.id}>
               <div className="n">

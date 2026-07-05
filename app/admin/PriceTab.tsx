@@ -5,6 +5,11 @@ import { useRouter } from "next/navigation";
 import type { ItemRow } from "@/lib/types";
 import { updateCurrentPrice, broadcastPrices } from "@/app/admin/actions";
 
+/** 小数の丸め誤差（0.1+0.2のような問題）を避けるため、小数第2位までに丸める。 */
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
 function diffBadge(item: ItemRow) {
   if (!item.current_price || item.current_price <= 0) {
     return <span className="dif flat">未入力</span>;
@@ -12,15 +17,15 @@ function diffBadge(item: ItemRow) {
   if (item.published_price === null || item.published_price === undefined) {
     return <span className="dif flat">未配信</span>;
   }
-  const d = item.current_price - item.published_price;
+  const d = round2(item.current_price - item.published_price);
   if (d > 0) return <span className="dif up">▲+{d.toLocaleString("ja-JP")}</span>;
   if (d < 0) return <span className="dif down">▼{d.toLocaleString("ja-JP")}</span>;
   return <span className="dif flat">±0</span>;
 }
 
-/** 半角数字のみ（空文字も許容）かどうかを判定する。 */
-function isDigitsOnly(value: string): boolean {
-  return /^[0-9]*$/.test(value);
+/** 半角数字と小数点（小数第2位まで）のみを許可する（空文字も許容）。 */
+function isValidPriceInput(value: string): boolean {
+  return /^[0-9]*\.?[0-9]{0,2}$/.test(value);
 }
 
 export default function PriceTab({
@@ -49,13 +54,13 @@ export default function PriceTab({
   );
 
   function handlePriceInput(itemId: string, value: string) {
-    if (!isDigitsOnly(value)) return;
+    if (!isValidPriceInput(value)) return;
     setPrices((prev) => ({ ...prev, [itemId]: value }));
   }
 
   function handlePriceBlur(itemId: string) {
     const raw = prices[itemId] ?? "";
-    const current = Math.max(0, Math.round(Number(raw) || 0));
+    const current = Math.max(0, round2(Number(raw) || 0));
     setPrices((prev) => ({ ...prev, [itemId]: current > 0 ? String(current) : "" }));
     startTransition(async () => {
       try {
@@ -112,7 +117,7 @@ export default function PriceTab({
             <input
               className="pnum"
               type="text"
-              inputMode="numeric"
+              inputMode="decimal"
               value={prices[item.id] ?? ""}
               onChange={(e) => handlePriceInput(item.id, e.target.value)}
               onBlur={() => handlePriceBlur(item.id)}

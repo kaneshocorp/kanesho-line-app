@@ -35,9 +35,14 @@ type DiffBadge = {
   backgroundColor: string;
 };
 
+/** 小数の丸め誤差を避けるため、小数第2位までに丸める。 */
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
 function diffBadge(price: number, prev: number | null): DiffBadge | null {
   if (prev === null || prev === undefined) return null;
-  const d = price - prev;
+  const d = round2(price - prev);
   if (d > 0) {
     return { label: `▲+${d.toLocaleString("ja-JP")}`, color: "#B3261E", backgroundColor: "#FBE7E6" };
   }

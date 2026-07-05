@@ -9,9 +9,14 @@ import type { ItemRow, BusinessConfigRow, CalendarOverrideRow } from "@/lib/type
 // タブ1: 価格配信
 // -----------------------------------------------------------------------
 
+/** 小数の丸め誤差を避けるため、小数第2位までに丸める。 */
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
 /** 品目の下書き価格（current_price）を保存する。 */
 export async function updateCurrentPrice(itemId: string, price: number) {
-  const safePrice = Math.max(0, Math.round(Number(price) || 0));
+  const safePrice = Math.max(0, round2(Number(price) || 0));
   const supabase = supabaseAdmin();
   const { error } = await supabase
     .from("items")
