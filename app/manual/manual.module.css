@@ -426,10 +426,15 @@
   .toc {
     break-after: page;
   }
-  .section {
-    break-inside: avoid-page;
+  /* 2カラムだと左右の高さが揃わずページの切れ目で片方が空白になるため、印刷時は縦積みにする */
+  .methodTabs {
+    grid-template-columns: 1fr;
   }
-  .tabSection {
+  .methodCard,
+  .tabSection,
+  .callout,
+  .faqItem,
+  .step {
     break-inside: avoid-page;
   }
   @page {
