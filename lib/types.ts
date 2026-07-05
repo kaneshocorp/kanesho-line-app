@@ -59,6 +59,16 @@ export type BusinessConfigRow = {
   break_end: string | null;
 };
 
+export type MessageRow = {
+  id: string;
+  line_user_id: string;
+  direction: "in" | "out";
+  body: string;
+  read: boolean;
+  created_at: string;
+  friend?: Pick<FriendRow, "display_name" | "real_name"> | null;
+};
+
 export type BroadcastKind = "price" | "closure" | "announcement" | "short_hours";
 
 export type BroadcastRow = {

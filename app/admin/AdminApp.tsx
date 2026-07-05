@@ -5,6 +5,7 @@ import type {
   ItemRow,
   FriendRow,
   PhotoSubmissionRow,
+  MessageRow,
   CalendarOverrideRow,
   BusinessConfigRow,
 } from "@/lib/types";
@@ -13,9 +14,17 @@ import CalendarTab from "@/app/admin/CalendarTab";
 import ItemsTab from "@/app/admin/ItemsTab";
 import FriendsTab from "@/app/admin/FriendsTab";
 import PhotosTab from "@/app/admin/PhotosTab";
+import MessagesTab from "@/app/admin/MessagesTab";
 import AnnouncementTab from "@/app/admin/AnnouncementTab";
 
-type TabKey = "price" | "calendar" | "items" | "friends" | "photos" | "announcement";
+type TabKey =
+  | "price"
+  | "calendar"
+  | "items"
+  | "friends"
+  | "photos"
+  | "messages"
+  | "announcement";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "price", label: "価格配信" },
@@ -23,6 +32,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "items", label: "品目管理" },
   { key: "friends", label: "友だち" },
   { key: "photos", label: "写真査定" },
+  { key: "messages", label: "個別メッセージ" },
   { key: "announcement", label: "お知らせ" },
 ];
 
@@ -30,12 +40,14 @@ export default function AdminApp({
   initialItems,
   initialFriends,
   initialPhotoSubmissions,
+  initialMessages,
   initialCalendarOverrides,
   businessConfig,
 }: {
   initialItems: ItemRow[];
   initialFriends: FriendRow[];
   initialPhotoSubmissions: PhotoSubmissionRow[];
+  initialMessages: MessageRow[];
   initialCalendarOverrides: CalendarOverrideRow[];
   businessConfig: BusinessConfigRow;
 }) {
@@ -48,6 +60,9 @@ export default function AdminApp({
   }
 
   const pendingPhotoCount = initialPhotoSubmissions.filter((p) => !p.done).length;
+  const pendingMessageCount = new Set(
+    initialMessages.filter((m) => m.direction === "in" && !m.read).map((m) => m.line_user_id)
+  ).size;
 
   return (
     <div className="page">
@@ -66,6 +81,7 @@ export default function AdminApp({
           >
             {t.label}
             {t.key === "photos" && pendingPhotoCount > 0 && <span className="dot" />}
+            {t.key === "messages" && pendingMessageCount > 0 && <span className="dot" />}
           </button>
         ))}
       </div>
@@ -82,6 +98,9 @@ export default function AdminApp({
       {tab === "friends" && <FriendsTab initialFriends={initialFriends} showToast={showToast} />}
       {tab === "photos" && (
         <PhotosTab initialPhotoSubmissions={initialPhotoSubmissions} showToast={showToast} />
+      )}
+      {tab === "messages" && (
+        <MessagesTab initialMessages={initialMessages} showToast={showToast} />
       )}
       {tab === "announcement" && <AnnouncementTab showToast={showToast} />}
 

@@ -5,6 +5,7 @@ import type {
   PhotoSubmissionRow,
   CalendarOverrideRow,
   BusinessConfigRow,
+  MessageRow,
 } from "@/lib/types";
 import AdminApp from "@/app/admin/AdminApp";
 
@@ -23,13 +24,18 @@ export default async function AdminPage() {
   const now = new Date();
   const { startKey, endKey } = monthRange(now);
 
-  const [itemsRes, friendsRes, photosRes, overridesRes, configRes] = await Promise.all([
+  const [itemsRes, friendsRes, photosRes, messagesRes, overridesRes, configRes] = await Promise.all([
     supabase.from("items").select("*").order("sort_order", { ascending: true }),
     supabase.from("friends").select("*").order("joined_at", { ascending: true }),
     supabase
       .from("photo_submissions")
       .select("*, friend:friends(display_name, real_name)")
       .order("received_at", { ascending: false }),
+    supabase
+      .from("messages")
+      .select("*, friend:friends(display_name, real_name)")
+      .order("created_at", { ascending: false })
+      .limit(500),
     supabase
       .from("calendar_overrides")
       .select("*")
@@ -41,6 +47,7 @@ export default async function AdminPage() {
   const items = (itemsRes.data ?? []) as ItemRow[];
   const friends = (friendsRes.data ?? []) as FriendRow[];
   const photoSubmissions = (photosRes.data ?? []) as unknown as PhotoSubmissionRow[];
+  const messages = (messagesRes.data ?? []) as unknown as MessageRow[];
   const calendarOverrides = (overridesRes.data ?? []) as CalendarOverrideRow[];
   const businessConfig = (configRes.data ?? {
     id: 1,
@@ -56,6 +63,7 @@ export default async function AdminPage() {
       initialItems={items}
       initialFriends={friends}
       initialPhotoSubmissions={photoSubmissions}
+      initialMessages={messages}
       initialCalendarOverrides={calendarOverrides}
       businessConfig={businessConfig}
     />

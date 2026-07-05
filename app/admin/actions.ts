@@ -362,4 +362,49 @@ export async function broadcastAnnouncement(message: string): Promise<{ recipien
   return { recipientCount: recipientCount ?? 0 };
 }
 
+// -----------------------------------------------------------------------
+// タブ7: 個別メッセージ
+// -----------------------------------------------------------------------
+
+/**
+ * LINE友だち1人に個別メッセージを送信する（プッシュメッセージAPI）。
+ * 返信トークンは短時間で失効するため、後からの返信には使えない。
+ * プッシュメッセージは配信（broadcast）とは別に、月間メッセージ数の枠を消費する。
+ */
+export async function sendReplyMessage(lineUserId: string, body: string) {
+  const trimmed = body.trim();
+  if (!trimmed) throw new Error("メッセージを入力してください");
+
+  await lineClient().pushMessage({ to: lineUserId, messages: [buildTextMessage(trimmed)] });
+
+  const supabase = supabaseAdmin();
+  const { error: insertError } = await supabase.from("messages").insert({
+    line_user_id: lineUserId,
+    direction: "out",
+    body: trimmed,
+    read: true,
+  });
+  if (insertError) throw new Error(`メッセージの保存に失敗しました: ${insertError.message}`);
+
+  const { error: readError } = await supabase
+    .from("messages")
+    .update({ read: true })
+    .eq("line_user_id", lineUserId)
+    .eq("direction", "in")
+    .eq("read", false);
+  if (readError) throw new Error(`既読処理に失敗しました: ${readError.message}`);
+}
+
+/** 返信不要と判断した個別メッセージを、返信せずに対応済みにする。 */
+export async function markConversationRead(lineUserId: string) {
+  const supabase = supabaseAdmin();
+  const { error } = await supabase
+    .from("messages")
+    .update({ read: true })
+    .eq("line_user_id", lineUserId)
+    .eq("direction", "in")
+    .eq("read", false);
+  if (error) throw new Error(`既読処理に失敗しました: ${error.message}`);
+}
+
 export { toDateKey };

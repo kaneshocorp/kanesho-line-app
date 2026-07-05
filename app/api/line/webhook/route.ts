@@ -99,7 +99,17 @@ async function handleTextMessage(
     return;
   }
 
-  // それ以外は意図的に何もしない（FAQボットは作らない）。
+  // それ以外は個別メッセージとして保存し、管理画面から担当者が直接返信する（FAQボットは作らない）。
+  await supabaseAdmin().from("messages").insert({
+    line_user_id: userId,
+    direction: "in",
+    body: message.text,
+  });
+
+  await lineClient().replyMessage({
+    replyToken,
+    messages: [buildTextMessage("メッセージを受け取りました。担当者より追ってご連絡いたします。")],
+  });
 }
 
 async function handleImageMessage(
