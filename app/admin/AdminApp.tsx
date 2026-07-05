@@ -59,6 +59,9 @@ export default function AdminApp({
     <div className="page">
       <div className="ad-bar">
         <span className="t">金山商店 管理</span>
+        <a className="manual-link" href="/manual" target="_blank" rel="noopener noreferrer">
+          📖 マニュアル
+        </a>
         <span className="who">従業員用</span>
       </div>
 
