@@ -10,7 +10,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 export const dynamic = "force-dynamic";
 
 const PHOTO_ASSESSMENT_KEYWORD = "写真でかんたん査定";
-const CHAT_CONSULTATION_KEYWORD = "チャットで相談";
+const PHONE_NUMBER = "0827-22-7580";
 
 async function handleFollow(event: webhook.FollowEvent) {
   if (event.source?.type !== "user" || !event.source.userId) return;
@@ -94,25 +94,6 @@ async function handleTextMessage(
     return;
   }
 
-  if (message.text === CHAT_CONSULTATION_KEYWORD) {
-    await supabase
-      .from("friends")
-      .update({ conversation_open: true })
-      .eq("line_user_id", userId);
-
-    await lineClient().replyMessage({
-      replyToken,
-      messages: [
-        buildQuickReplyMessage("ご相談内容を入力して送信してください。", [
-          "だいたいの金額を知りたい",
-          "持ち込みできるか知りたい",
-          "その他の質問",
-        ]),
-      ],
-    });
-    return;
-  }
-
   if (message.text === PHOTO_ASSESSMENT_KEYWORD) {
     await supabase
       .from("friends")
@@ -161,8 +142,8 @@ async function handleTextMessage(
     replyToken,
     messages: [
       buildQuickReplyMessage(
-        `ご相談は「${CHAT_CONSULTATION_KEYWORD}」ボタンからお送りください。`,
-        [CHAT_CONSULTATION_KEYWORD]
+        `お問い合わせはお電話（${PHONE_NUMBER}）にて承っております。査定をご希望の場合は「${PHOTO_ASSESSMENT_KEYWORD}」ボタンからどうぞ。`,
+        [PHOTO_ASSESSMENT_KEYWORD]
       ),
     ],
   });
