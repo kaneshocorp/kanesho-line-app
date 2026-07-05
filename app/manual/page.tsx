@@ -6,6 +6,9 @@ export default function ManualPage() {
   return (
     <div className={styles.wrapper}>
       <div className={styles.toolbar}>
+        <a className={styles.printBtn} href="/manual/kanesho-admin-manual.pdf" download>
+          PDFをダウンロード
+        </a>
         <button type="button" className={styles.printBtn} onClick={() => window.print()}>
           この画面を印刷する
         </button>
