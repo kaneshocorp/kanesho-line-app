@@ -250,16 +250,6 @@ export async function updateItemName(itemId: string, name: string) {
   if (error) throw new Error(`品目名の更新に失敗しました: ${error.message}`);
 }
 
-export async function updateItemPrice(itemId: string, price: number) {
-  const safePrice = Math.max(0, Math.round(Number(price) || 0));
-  const supabase = supabaseAdmin();
-  const { error } = await supabase
-    .from("items")
-    .update({ current_price: safePrice })
-    .eq("id", itemId);
-  if (error) throw new Error(`価格の更新に失敗しました: ${error.message}`);
-}
-
 export async function toggleItemActive(itemId: string, active: boolean) {
   const supabase = supabaseAdmin();
   const { error } = await supabase.from("items").update({ active }).eq("id", itemId);
@@ -321,19 +311,6 @@ export async function toggleFriendActive(lineUserId: string, active: boolean) {
 }
 
 // -----------------------------------------------------------------------
-// タブ4: 写真査定
-// -----------------------------------------------------------------------
-
-export async function togglePhotoDone(photoId: string, done: boolean) {
-  const supabase = supabaseAdmin();
-  const { error } = await supabase
-    .from("photo_submissions")
-    .update({ done })
-    .eq("id", photoId);
-  if (error) throw new Error(`対応状況の更新に失敗しました: ${error.message}`);
-}
-
-// -----------------------------------------------------------------------
 // タブ5: お知らせ（自由配信）
 // -----------------------------------------------------------------------
 
@@ -363,8 +340,38 @@ export async function broadcastAnnouncement(message: string): Promise<{ recipien
 }
 
 // -----------------------------------------------------------------------
-// タブ7: 個別メッセージ
+// タブ4: 個別相談（写真査定＋個別メッセージ）
 // -----------------------------------------------------------------------
+
+/**
+ * 相談セッションを閉じる: 未読の受信メッセージ・未対応の写真をすべて対応済みにし、
+ * 「チャットで相談」「写真でかんたん査定」から始まった conversation_open を落として
+ * 次に唐突なメッセージが来た時にまた案内文が出るようにする。
+ */
+async function closeConversation(lineUserId: string) {
+  const supabase = supabaseAdmin();
+
+  const { error: messagesError } = await supabase
+    .from("messages")
+    .update({ read: true })
+    .eq("line_user_id", lineUserId)
+    .eq("direction", "in")
+    .eq("read", false);
+  if (messagesError) throw new Error(`既読処理に失敗しました: ${messagesError.message}`);
+
+  const { error: photosError } = await supabase
+    .from("photo_submissions")
+    .update({ done: true })
+    .eq("line_user_id", lineUserId)
+    .eq("done", false);
+  if (photosError) throw new Error(`写真の対応状況更新に失敗しました: ${photosError.message}`);
+
+  const { error: friendError } = await supabase
+    .from("friends")
+    .update({ conversation_open: false })
+    .eq("line_user_id", lineUserId);
+  if (friendError) throw new Error(`相談状態の更新に失敗しました: ${friendError.message}`);
+}
 
 /**
  * LINE友だち1人に個別メッセージを送信する（プッシュメッセージAPI）。
@@ -382,29 +389,17 @@ export async function sendReplyMessage(lineUserId: string, body: string) {
     line_user_id: lineUserId,
     direction: "out",
     body: trimmed,
+    prompted: true,
     read: true,
   });
   if (insertError) throw new Error(`メッセージの保存に失敗しました: ${insertError.message}`);
 
-  const { error: readError } = await supabase
-    .from("messages")
-    .update({ read: true })
-    .eq("line_user_id", lineUserId)
-    .eq("direction", "in")
-    .eq("read", false);
-  if (readError) throw new Error(`既読処理に失敗しました: ${readError.message}`);
+  await closeConversation(lineUserId);
 }
 
-/** 返信不要と判断した個別メッセージを、返信せずに対応済みにする。 */
-export async function markConversationRead(lineUserId: string) {
-  const supabase = supabaseAdmin();
-  const { error } = await supabase
-    .from("messages")
-    .update({ read: true })
-    .eq("line_user_id", lineUserId)
-    .eq("direction", "in")
-    .eq("read", false);
-  if (error) throw new Error(`既読処理に失敗しました: ${error.message}`);
+/** 返信不要と判断した相談を、返信せずに対応済みにする。 */
+export async function markConversationHandled(lineUserId: string) {
+  await closeConversation(lineUserId);
 }
 
 export { toDateKey };

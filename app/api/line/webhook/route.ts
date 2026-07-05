@@ -1,10 +1,16 @@
 import { webhook } from "@line/bot-sdk";
-import { lineClient, verifyLineSignature, buildTextMessage } from "@/lib/line/client";
+import {
+  lineClient,
+  verifyLineSignature,
+  buildTextMessage,
+  buildQuickReplyMessage,
+} from "@/lib/line/client";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 
 const PHOTO_ASSESSMENT_KEYWORD = "写真でかんたん査定";
+const CHAT_CONSULTATION_KEYWORD = "チャットで相談";
 
 async function handleFollow(event: webhook.FollowEvent) {
   if (event.source?.type !== "user" || !event.source.userId) return;
@@ -67,15 +73,16 @@ async function handleTextMessage(
   if (!event.replyToken) return;
   const userId = event.source.userId;
   const replyToken = event.replyToken;
+  const supabase = supabaseAdmin();
 
-  const { data: friend } = await supabaseAdmin()
+  const { data: friend } = await supabase
     .from("friends")
-    .select("line_user_id, awaiting_name")
+    .select("line_user_id, awaiting_name, conversation_open")
     .eq("line_user_id", userId)
     .maybeSingle();
 
   if (friend?.awaiting_name) {
-    await supabaseAdmin()
+    await supabase
       .from("friends")
       .update({ real_name: message.text, awaiting_name: false })
       .eq("line_user_id", userId);
@@ -87,7 +94,31 @@ async function handleTextMessage(
     return;
   }
 
+  if (message.text === CHAT_CONSULTATION_KEYWORD) {
+    await supabase
+      .from("friends")
+      .update({ conversation_open: true })
+      .eq("line_user_id", userId);
+
+    await lineClient().replyMessage({
+      replyToken,
+      messages: [
+        buildQuickReplyMessage("ご相談内容を入力して送信してください。", [
+          "だいたいの金額を知りたい",
+          "持ち込みできるか知りたい",
+          "その他の質問",
+        ]),
+      ],
+    });
+    return;
+  }
+
   if (message.text === PHOTO_ASSESSMENT_KEYWORD) {
+    await supabase
+      .from("friends")
+      .update({ conversation_open: true })
+      .eq("line_user_id", userId);
+
     await lineClient().replyMessage({
       replyToken,
       messages: [
@@ -99,16 +130,41 @@ async function handleTextMessage(
     return;
   }
 
-  // それ以外は個別メッセージとして保存し、管理画面から担当者が直接返信する（FAQボットは作らない）。
-  await supabaseAdmin().from("messages").insert({
+  if (friend?.conversation_open) {
+    // 相談セッション中の続きのメッセージ → 担当者への対応待ちとして保存する。
+    await supabase.from("messages").insert({
+      line_user_id: userId,
+      direction: "in",
+      body: message.text,
+      prompted: true,
+      read: false,
+    });
+
+    await lineClient().replyMessage({
+      replyToken,
+      messages: [buildTextMessage("メッセージを受け取りました。担当者より追ってご連絡いたします。")],
+    });
+    return;
+  }
+
+  // ボタンを押さず唐突に送られてきたメッセージ → 記録は残すが対応不要（read:true）として保存し、
+  // 案内だけ返信する（FAQボットは作らない）。
+  await supabase.from("messages").insert({
     line_user_id: userId,
     direction: "in",
     body: message.text,
+    prompted: false,
+    read: true,
   });
 
   await lineClient().replyMessage({
     replyToken,
-    messages: [buildTextMessage("メッセージを受け取りました。担当者より追ってご連絡いたします。")],
+    messages: [
+      buildQuickReplyMessage(
+        `ご相談は「${CHAT_CONSULTATION_KEYWORD}」ボタンからお送りください。`,
+        [CHAT_CONSULTATION_KEYWORD]
+      ),
+    ],
   });
 }
 
@@ -118,8 +174,9 @@ async function handleImageMessage(
 ) {
   if (event.source?.type !== "user" || !event.source.userId) return;
   const userId = event.source.userId;
+  const supabase = supabaseAdmin();
 
-  await supabaseAdmin()
+  await supabase
     .from("friends")
     .upsert(
       {
@@ -132,17 +189,40 @@ async function handleImageMessage(
       { onConflict: "line_user_id", ignoreDuplicates: true }
     );
 
-  await supabaseAdmin().from("photo_submissions").insert({
+  // このセッションで既にメッセージを送っているか（＝写真だけでないか）を、写真の保存前に確認しておく。
+  const { count: existingMessageCount } = await supabase
+    .from("messages")
+    .select("*", { count: "exact", head: true })
+    .eq("line_user_id", userId)
+    .eq("direction", "in")
+    .eq("read", false);
+
+  await supabase.from("photo_submissions").insert({
     line_user_id: userId,
     message_id: message.id,
     received_at: new Date().toISOString(),
     done: false,
   });
 
-  if (event.replyToken) {
+  await supabase.from("friends").update({ conversation_open: true }).eq("line_user_id", userId);
+
+  if (!event.replyToken) return;
+
+  if (!existingMessageCount) {
+    // このセッション最初の1枚（まだメッセージが伴っていない）→ 何を知りたいか一言添えてもらうよう案内する。
     await lineClient().replyMessage({
       replyToken: event.replyToken,
-      messages: [buildTextMessage("写真を受け取りました。追ってご連絡いたします。")],
+      messages: [
+        buildQuickReplyMessage(
+          "写真を受け取りました。品目や知りたいことがあれば、続けてメッセージでお知らせください。",
+          ["これは何の金属ですか？", "だいたいの金額が知りたいです", "他にも写真があります"]
+        ),
+      ],
+    });
+  } else {
+    await lineClient().replyMessage({
+      replyToken: event.replyToken,
+      messages: [buildTextMessage("写真を受け取りました。")],
     });
   }
 }

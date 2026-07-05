@@ -177,3 +177,23 @@ export function buildPriceFlexMessage(
 export function buildTextMessage(text: string): messagingApi.TextMessage {
   return { type: "text", text };
 }
+
+/**
+ * クイックリプライ（タップで送信できる短冊ボタン）付きのテキストメッセージを組み立てる。
+ * 各選択肢はタップするとそのままユーザーの発言として送信される（自由入力の代わりの例文）。
+ */
+export function buildQuickReplyMessage(
+  text: string,
+  options: string[]
+): messagingApi.TextMessage {
+  return {
+    type: "text",
+    text,
+    quickReply: {
+      items: options.map((label) => ({
+        type: "action",
+        action: { type: "message", label: label.slice(0, 20), text: label },
+      })),
+    },
+  };
+}

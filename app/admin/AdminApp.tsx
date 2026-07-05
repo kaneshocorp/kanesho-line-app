@@ -13,26 +13,17 @@ import PriceTab from "@/app/admin/PriceTab";
 import CalendarTab from "@/app/admin/CalendarTab";
 import ItemsTab from "@/app/admin/ItemsTab";
 import FriendsTab from "@/app/admin/FriendsTab";
-import PhotosTab from "@/app/admin/PhotosTab";
-import MessagesTab from "@/app/admin/MessagesTab";
+import ConsultationTab from "@/app/admin/ConsultationTab";
 import AnnouncementTab from "@/app/admin/AnnouncementTab";
 
-type TabKey =
-  | "price"
-  | "calendar"
-  | "items"
-  | "friends"
-  | "photos"
-  | "messages"
-  | "announcement";
+type TabKey = "price" | "calendar" | "items" | "friends" | "consultation" | "announcement";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "price", label: "価格配信" },
   { key: "calendar", label: "営業カレンダー" },
   { key: "items", label: "品目管理" },
   { key: "friends", label: "友だち" },
-  { key: "photos", label: "写真査定" },
-  { key: "messages", label: "個別メッセージ" },
+  { key: "consultation", label: "個別相談" },
   { key: "announcement", label: "お知らせ" },
 ];
 
@@ -59,10 +50,10 @@ export default function AdminApp({
     window.setTimeout(() => setToast(null), 3000);
   }
 
-  const pendingPhotoCount = initialPhotoSubmissions.filter((p) => !p.done).length;
-  const pendingMessageCount = new Set(
-    initialMessages.filter((m) => m.direction === "in" && !m.read).map((m) => m.line_user_id)
-  ).size;
+  const pendingConsultationCount = new Set([
+    ...initialPhotoSubmissions.filter((p) => !p.done).map((p) => p.line_user_id),
+    ...initialMessages.filter((m) => m.direction === "in" && !m.read).map((m) => m.line_user_id),
+  ]).size;
 
   return (
     <div className="page">
@@ -80,8 +71,7 @@ export default function AdminApp({
             onClick={() => setTab(t.key)}
           >
             {t.label}
-            {t.key === "photos" && pendingPhotoCount > 0 && <span className="dot" />}
-            {t.key === "messages" && pendingMessageCount > 0 && <span className="dot" />}
+            {t.key === "consultation" && pendingConsultationCount > 0 && <span className="dot" />}
           </button>
         ))}
       </div>
@@ -96,11 +86,12 @@ export default function AdminApp({
       )}
       {tab === "items" && <ItemsTab initialItems={initialItems} showToast={showToast} />}
       {tab === "friends" && <FriendsTab initialFriends={initialFriends} showToast={showToast} />}
-      {tab === "photos" && (
-        <PhotosTab initialPhotoSubmissions={initialPhotoSubmissions} showToast={showToast} />
-      )}
-      {tab === "messages" && (
-        <MessagesTab initialMessages={initialMessages} showToast={showToast} />
+      {tab === "consultation" && (
+        <ConsultationTab
+          initialMessages={initialMessages}
+          initialPhotoSubmissions={initialPhotoSubmissions}
+          showToast={showToast}
+        />
       )}
       {tab === "announcement" && <AnnouncementTab showToast={showToast} />}
 

@@ -22,6 +22,8 @@ export type FriendRow = {
   real_name: string | null;
   active: boolean;
   awaiting_name: boolean;
+  /** 「チャットで相談」「写真でかんたん査定」から始まる相談セッションが進行中かどうか */
+  conversation_open: boolean;
   joined_at: string;
   updated_at: string;
 };
@@ -65,6 +67,8 @@ export type MessageRow = {
   direction: "in" | "out";
   body: string;
   read: boolean;
+  /** false: ボタンを押さず唐突に送られてきたメッセージ（案内だけ返信し、対応不要として扱う） */
+  prompted: boolean;
   created_at: string;
   friend?: Pick<FriendRow, "display_name" | "real_name"> | null;
 };
