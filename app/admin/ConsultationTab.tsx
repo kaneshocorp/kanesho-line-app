@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { MessageRow, PhotoSubmissionRow } from "@/lib/types";
 import { sendReplyMessage, markConversationHandled } from "@/app/admin/actions";
@@ -121,6 +121,15 @@ export default function ConsultationTab({
   const pendingCount = conversations.filter((c) => c.unreadCount > 0).length;
   const openConversation = conversations.find((c) => c.lineUserId === openId) ?? null;
 
+  const threadRef = useRef<HTMLDivElement | null>(null);
+
+  // 会話を開いた時・新しいメッセージが増えた時は、常に最新（一番下）が見えるようにする。
+  useEffect(() => {
+    if (threadRef.current) {
+      threadRef.current.scrollTop = threadRef.current.scrollHeight;
+    }
+  }, [openId, openConversation?.items.length]);
+
   function handleSend(lineUserId: string) {
     const draft = (drafts[lineUserId] ?? "").trim();
     if (!draft) return;
@@ -237,7 +246,7 @@ export default function ConsultationTab({
               </button>
             </div>
 
-            <div className="msg-thread">
+            <div className="msg-thread" ref={threadRef}>
               {openConversation.items.map((it) =>
                 it.kind === "photo" ? (
                   <div className="msg-bubble in msg-photo" key={`p-${it.id}`}>
