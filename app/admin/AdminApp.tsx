@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import type {
   ItemRow,
   FriendRow,
@@ -46,6 +46,7 @@ export default function AdminApp({
   initialCalendarOverrides: CalendarOverrideRow[];
   businessConfig: BusinessConfigRow;
 }) {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const tabParam = searchParams.get("tab");
   const initialTab = (TAB_KEYS as string[]).includes(tabParam ?? "") ? (tabParam as TabKey) : "price";
@@ -56,6 +57,13 @@ export default function AdminApp({
     setToast(message);
     window.setTimeout(() => setToast(null), 3000);
   }
+
+  // 個別相談タブのバッジ・内容が手動リロードなしでも新着に気づけるよう、定期的にサーバーデータを取り直す。
+  // 各タブのローカルstateはpropsから初回だけ初期化されるため、入力中の内容が上書きされることはない。
+  useEffect(() => {
+    const interval = setInterval(() => router.refresh(), 20000);
+    return () => clearInterval(interval);
+  }, [router]);
 
   const pendingConsultationCount = new Set([
     ...initialPhotoSubmissions.filter((p) => !p.done).map((p) => p.line_user_id),

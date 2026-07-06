@@ -1,9 +1,40 @@
 "use server";
 
+import type { messagingApi } from "@line/bot-sdk";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { lineClient, buildPriceFlexMessage, buildTextMessage } from "@/lib/line/client";
 import { toDateKey, naturalStatus } from "@/lib/calendar";
 import type { ItemRow, BusinessConfigRow, CalendarOverrideRow } from "@/lib/types";
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const result: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) {
+    result.push(arr.slice(i, i + size));
+  }
+  return result;
+}
+
+/**
+ * 配信対象（active=true、配信停止していない）の友だちにだけ一斉送信する。
+ * LINEのmulticastは1回最大500人までのため、必要なら分割して送る。
+ */
+async function sendToActiveFriends(messages: messagingApi.Message[]): Promise<number> {
+  const supabase = supabaseAdmin();
+  const { data: friends, error } = await supabase
+    .from("friends")
+    .select("line_user_id")
+    .eq("active", true);
+  if (error) throw new Error(`配信対象の取得に失敗しました: ${error.message}`);
+
+  const ids = (friends ?? []).map((f) => f.line_user_id);
+  if (ids.length === 0) return 0;
+
+  const client = lineClient();
+  for (const batch of chunk(ids, 500)) {
+    await client.multicast({ to: batch, messages });
+  }
+  return ids.length;
+}
 
 // -----------------------------------------------------------------------
 // タブ1: 価格配信
@@ -74,26 +105,20 @@ export async function broadcastPrices(): Promise<{ recipientCount: number }> {
     .order("sort_order", { ascending: true });
   if (freshError) throw new Error(`品目の再取得に失敗しました: ${freshError.message}`);
 
-  const { count: recipientCount, error: countError } = await supabase
-    .from("friends")
-    .select("*", { count: "exact", head: true })
-    .eq("active", true);
-  if (countError) throw new Error(`配信対象人数の取得に失敗しました: ${countError.message}`);
-
   const now = new Date();
   const label = updatedAtLabel(now);
   const message = buildPriceFlexMessage((freshItems ?? []) as ItemRow[], label);
 
-  await lineClient().broadcast({ messages: [message] });
+  const recipientCount = await sendToActiveFriends([message]);
 
   const { error: broadcastError } = await supabase.from("broadcasts").insert({
     kind: "price",
-    recipient_count: recipientCount ?? 0,
+    recipient_count: recipientCount,
     snapshot: freshItems,
   });
   if (broadcastError) throw new Error(`配信履歴の保存に失敗しました: ${broadcastError.message}`);
 
-  return { recipientCount: recipientCount ?? 0 };
+  return { recipientCount };
 }
 
 /**
@@ -175,22 +200,16 @@ export async function broadcastClosureBulk(
   const failed = results.find((r) => r.error);
   if (failed?.error) throw new Error(`カレンダーの更新に失敗しました: ${failed.error.message}`);
 
-  const { count: recipientCount, error: countError } = await supabase
-    .from("friends")
-    .select("*", { count: "exact", head: true })
-    .eq("active", true);
-  if (countError) throw new Error(`配信対象人数の取得に失敗しました: ${countError.message}`);
-
-  await lineClient().broadcast({ messages: [buildTextMessage(message)] });
+  const recipientCount = await sendToActiveFriends([buildTextMessage(message)]);
 
   const { error: broadcastError } = await supabase.from("broadcasts").insert({
     kind: "closure",
-    recipient_count: recipientCount ?? 0,
+    recipient_count: recipientCount,
     snapshot: { dates, message },
   });
   if (broadcastError) throw new Error(`配信履歴の保存に失敗しました: ${broadcastError.message}`);
 
-  return { recipientCount: recipientCount ?? 0 };
+  return { recipientCount };
 }
 
 /**
@@ -222,22 +241,16 @@ export async function broadcastShortHoursBulk(
   const failed = results.find((r) => r.error);
   if (failed?.error) throw new Error(`カレンダーの更新に失敗しました: ${failed.error.message}`);
 
-  const { count: recipientCount, error: countError } = await supabase
-    .from("friends")
-    .select("*", { count: "exact", head: true })
-    .eq("active", true);
-  if (countError) throw new Error(`配信対象人数の取得に失敗しました: ${countError.message}`);
-
-  await lineClient().broadcast({ messages: [buildTextMessage(message)] });
+  const recipientCount = await sendToActiveFriends([buildTextMessage(message)]);
 
   const { error: broadcastError } = await supabase.from("broadcasts").insert({
     kind: "short_hours",
-    recipient_count: recipientCount ?? 0,
+    recipient_count: recipientCount,
     snapshot: { dates, openTime, closeTime, message },
   });
   if (broadcastError) throw new Error(`配信履歴の保存に失敗しました: ${broadcastError.message}`);
 
-  return { recipientCount: recipientCount ?? 0 };
+  return { recipientCount };
 }
 
 // -----------------------------------------------------------------------
@@ -321,22 +334,16 @@ export async function broadcastAnnouncement(message: string): Promise<{ recipien
 
   const supabase = supabaseAdmin();
 
-  const { count: recipientCount, error: countError } = await supabase
-    .from("friends")
-    .select("*", { count: "exact", head: true })
-    .eq("active", true);
-  if (countError) throw new Error(`配信対象人数の取得に失敗しました: ${countError.message}`);
-
-  await lineClient().broadcast({ messages: [buildTextMessage(trimmed)] });
+  const recipientCount = await sendToActiveFriends([buildTextMessage(trimmed)]);
 
   const { error: broadcastError } = await supabase.from("broadcasts").insert({
     kind: "announcement",
-    recipient_count: recipientCount ?? 0,
+    recipient_count: recipientCount,
     snapshot: { message: trimmed },
   });
   if (broadcastError) throw new Error(`配信履歴の保存に失敗しました: ${broadcastError.message}`);
 
-  return { recipientCount: recipientCount ?? 0 };
+  return { recipientCount };
 }
 
 // -----------------------------------------------------------------------
