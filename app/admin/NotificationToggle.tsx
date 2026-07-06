@@ -36,6 +36,12 @@ export default function NotificationToggle({
   async function handleEnable() {
     setBusy(true);
     try {
+      const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+      if (!vapidKey) {
+        showToast("通知の設定に失敗しました: VAPID鍵が未設定です（Vercelの環境変数を確認してください）");
+        return;
+      }
+
       const permission = await Notification.requestPermission();
       if (permission !== "granted") {
         showToast("通知が許可されませんでした。ブラウザの設定からやり直せます。");
@@ -45,16 +51,14 @@ export default function NotificationToggle({
       const registration = await navigator.serviceWorker.ready;
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(
-          process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!
-        ),
+        applicationServerKey: urlBase64ToUint8Array(vapidKey),
       });
 
       await subscribeToPush(JSON.parse(JSON.stringify(subscription)));
       setEnabled(true);
       showToast("通知をオンにしました");
-    } catch {
-      showToast("通知の設定に失敗しました");
+    } catch (e) {
+      showToast(`通知の設定に失敗しました: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setBusy(false);
     }
@@ -71,8 +75,8 @@ export default function NotificationToggle({
       }
       setEnabled(false);
       showToast("通知をオフにしました");
-    } catch {
-      showToast("通知の解除に失敗しました");
+    } catch (e) {
+      showToast(`通知の解除に失敗しました: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setBusy(false);
     }
