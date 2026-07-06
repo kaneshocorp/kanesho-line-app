@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import type {
   ItemRow,
   FriendRow,
@@ -15,6 +16,7 @@ import ItemsTab from "@/app/admin/ItemsTab";
 import FriendsTab from "@/app/admin/FriendsTab";
 import ConsultationTab from "@/app/admin/ConsultationTab";
 import AnnouncementTab from "@/app/admin/AnnouncementTab";
+import NotificationToggle from "@/app/admin/NotificationToggle";
 
 type TabKey = "price" | "calendar" | "items" | "friends" | "consultation" | "announcement";
 
@@ -26,6 +28,8 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "consultation", label: "個別相談" },
   { key: "announcement", label: "お知らせ" },
 ];
+
+const TAB_KEYS = TABS.map((t) => t.key);
 
 export default function AdminApp({
   initialItems,
@@ -42,7 +46,10 @@ export default function AdminApp({
   initialCalendarOverrides: CalendarOverrideRow[];
   businessConfig: BusinessConfigRow;
 }) {
-  const [tab, setTab] = useState<TabKey>("price");
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const initialTab = (TAB_KEYS as string[]).includes(tabParam ?? "") ? (tabParam as TabKey) : "price";
+  const [tab, setTab] = useState<TabKey>(initialTab);
   const [toast, setToast] = useState<string | null>(null);
 
   function showToast(message: string) {
@@ -62,6 +69,7 @@ export default function AdminApp({
         <a className="manual-link" href="/manual" target="_blank" rel="noopener noreferrer">
           📖 マニュアル
         </a>
+        <NotificationToggle showToast={showToast} />
         <span className="who">従業員用</span>
       </div>
 

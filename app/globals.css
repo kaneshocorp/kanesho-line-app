@@ -102,6 +102,22 @@ a:focus-visible {
   border-radius: 99px;
   white-space: nowrap;
 }
+.notif-toggle {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.16);
+  padding: 5px 12px;
+  border-radius: 99px;
+  white-space: nowrap;
+}
+.notif-toggle.on {
+  background: var(--amber);
+  color: #3d2800;
+}
+.notif-toggle:disabled {
+  opacity: 0.6;
+}
 .ad-info {
   font-size: 11.5px;
   color: var(--ink2);

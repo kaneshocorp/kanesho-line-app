@@ -402,4 +402,34 @@ export async function markConversationHandled(lineUserId: string) {
   await closeConversation(lineUserId);
 }
 
+// -----------------------------------------------------------------------
+// 通知設定（Web Push）
+// -----------------------------------------------------------------------
+
+type PushSubscriptionInput = {
+  endpoint: string;
+  keys: { p256dh: string; auth: string };
+};
+
+/** この端末を、個別相談の通知を受け取る対象として登録する。 */
+export async function subscribeToPush(subscription: PushSubscriptionInput) {
+  const supabase = supabaseAdmin();
+  const { error } = await supabase.from("push_subscriptions").upsert(
+    {
+      endpoint: subscription.endpoint,
+      p256dh: subscription.keys.p256dh,
+      auth: subscription.keys.auth,
+    },
+    { onConflict: "endpoint" }
+  );
+  if (error) throw new Error(`通知の登録に失敗しました: ${error.message}`);
+}
+
+/** この端末への通知を解除する。 */
+export async function unsubscribeFromPush(endpoint: string) {
+  const supabase = supabaseAdmin();
+  const { error } = await supabase.from("push_subscriptions").delete().eq("endpoint", endpoint);
+  if (error) throw new Error(`通知の解除に失敗しました: ${error.message}`);
+}
+
 export { toDateKey };

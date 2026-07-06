@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import type {
   ItemRow,
@@ -59,13 +60,15 @@ export default async function AdminPage() {
   }) as BusinessConfigRow;
 
   return (
-    <AdminApp
-      initialItems={items}
-      initialFriends={friends}
-      initialPhotoSubmissions={photoSubmissions}
-      initialMessages={messages}
-      initialCalendarOverrides={calendarOverrides}
-      businessConfig={businessConfig}
-    />
+    <Suspense>
+      <AdminApp
+        initialItems={items}
+        initialFriends={friends}
+        initialPhotoSubmissions={photoSubmissions}
+        initialMessages={messages}
+        initialCalendarOverrides={calendarOverrides}
+        businessConfig={businessConfig}
+      />
+    </Suspense>
   );
 }

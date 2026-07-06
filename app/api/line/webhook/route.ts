@@ -6,11 +6,13 @@ import {
   buildQuickReplyMessage,
 } from "@/lib/line/client";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { notifyStaff } from "@/lib/webpush";
 
 export const dynamic = "force-dynamic";
 
 const PHOTO_ASSESSMENT_KEYWORD = "写真でかんたん査定";
 const PHONE_NUMBER = "0827-22-7580";
+const CONSULTATION_URL = "/admin?tab=consultation";
 
 async function handleFollow(event: webhook.FollowEvent) {
   if (event.source?.type !== "user" || !event.source.userId) return;
@@ -125,6 +127,9 @@ async function handleTextMessage(
       replyToken,
       messages: [buildTextMessage("メッセージを受け取りました。担当者より追ってご連絡いたします。")],
     });
+
+    const preview = message.text.length > 40 ? `${message.text.slice(0, 40)}…` : message.text;
+    await notifyStaff("金山商店 個別相談", `新しいメッセージ：${preview}`, CONSULTATION_URL);
     return;
   }
 
@@ -206,6 +211,8 @@ async function handleImageMessage(
       messages: [buildTextMessage("写真を受け取りました。")],
     });
   }
+
+  await notifyStaff("金山商店 個別相談", "新しい査定写真が届きました", CONSULTATION_URL);
 }
 
 async function handleEvent(event: webhook.Event) {
