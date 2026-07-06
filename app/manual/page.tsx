@@ -61,7 +61,7 @@ export default function ManualPage() {
                   <li className={styles.step}>
                     <span className={styles.num}>1</span>
                     <div className={styles.stepBody}>
-                      <p>Google Chromeを開き、アドレス欄に次のURLを入力してEnterキーを押します。</p>
+                      <p>Google ChromeまたはMicrosoft Edgeを開き、アドレス欄に次のURLを入力してEnterキーを押します（どちらでも同じ手順で使えます）。</p>
                     </div>
                   </li>
                 </ol>
@@ -367,7 +367,7 @@ export default function ManualPage() {
               </div>
               <div className={styles.faqItem}>
                 <div className={styles.faqQ}>Q. デスクトップにアイコンを作ったのに、押しても何も起きません。</div>
-                <p className={styles.faqA}>A. まずChromeで一度そのURLを開き、右上の「⋮」メニューに「インストール」の項目があるかご確認ください。項目が見当たらない場合はChromeが最新版になっているかを確認し、一度ブラウザでURLを直接開いてからやり直してください。</p>
+                <p className={styles.faqA}>A. まずChromeまたはEdgeで一度そのURLを開き、右上の「⋮」メニューに「インストール」の項目があるかご確認ください。項目が見当たらない場合はブラウザが最新版になっているかを確認し、一度ブラウザでURLを直接開いてからやり直してください。</p>
               </div>
               <div className={styles.faqItem}>
                 <div className={styles.faqQ}>Q. お客様がLINEを友だち追加してくれたのに、個別相談タブに出てきません。</div>
